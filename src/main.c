@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 void monitor_process(int pid){
     char proc_path[256];
@@ -13,12 +14,50 @@ void monitor_process(int pid){
     }
 
     char buffer[4096];
-    if (fgets(buffer, sizeof(buffer), fp) != NULL)
+    if (fgets(buffer, sizeof(buffer), fp) == NULL)
     {
-        printf("\nConteúdo do /proc/%d/status: \n%s\n", pid, buffer);
+        fprintf(stderr, "Erro ao ler dados dos arquivos %s\n", proc_path);
+        fclose(fp);
+        return;
+    }
+
+    fclose(fp);
+
+    char *token;
+    int contagem = 0;
+    long user_time   = 0;
+    long system_time = 0;
+    long rss = 0;
+    long vsz = 0;
+
+    token = strtok(buffer, " ");
+
+    while (token != NULL && contagem <= 24){
+        switch (contagem)
+        {
+        case 14:
+            user_time = atol(token);
+            break;
+        case 15:
+            system_time = atol(token);
+            break;
+        case 23:
+            vsz = atol(token);
+            break;
+        case 24:
+            rss = atol(token);
+            break;
+        }
+        token = strtok(NULL, " "); //Continuar a leitura do buffer
+        contagem++;
     }
     
-    fclose(fp);
+    printf("===== Métricas para o PID: %d =====\n", pid);
+    printf("User time: %ld\n", user_time);
+    printf("System time: %ld\n", system_time);
+    printf("Memória virtual: %ld\n", vsz);
+    printf("Memória física: %ld", rss);
+
 }
 
 int main(int argc, char *argv[]){
