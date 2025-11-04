@@ -24,7 +24,7 @@ void monitor_process(int pid){
     fclose(fp);
 
     char *token;
-    int contagem = 0;
+    int contagem = 1;
     long user_time   = 0;
     long system_time = 0;
     long rss = 0;
@@ -53,10 +53,10 @@ void monitor_process(int pid){
     }
     
     printf("===== Métricas para o PID: %d =====\n", pid);
-    printf("User time: %ld\n", user_time);
-    printf("System time: %ld\n", system_time);
-    printf("Memória virtual: %ld\n", vsz);
-    printf("Memória física: %ld", rss);
+    printf("User time: %ld clock ticks\n", user_time);
+    printf("System time: %ld clock tick\n", system_time);
+    printf("Memória virtual: %ld bytes (%.2f MB)\n", vsz, (double)vsz/(1024 * 1024));
+    printf("Memória física: %ld páginas", rss);
 
 }
 
