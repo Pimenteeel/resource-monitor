@@ -3,8 +3,10 @@
 
 typedef struct 
 {
-    long user_time;
-    long system_time;
+    long user_time; // tempo que a cpu gasta executando o código do programa
+    long system_time; // tempo que a cpu gasta executando o código do sistema operacional em nome do programa
+    long threads; // menor unidade de execução dentro de um programa
+    long switches; // processo que o sistema operacional usa para pausar um programa e começa a executar outro
 } CpuMetrics;
 
 typedef struct
