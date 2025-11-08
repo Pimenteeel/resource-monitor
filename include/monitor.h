@@ -11,8 +11,9 @@ typedef struct
 
 typedef struct
 {
-    long vsize;
-    long rss;
+    long vsize; //espaço de endereçamento total que o processo reservou
+    long rss; // quantidade de memória ram física que o processo está realmente usando no exato momento
+    long page_faults; 
 } MemMetrics;
 
 typedef struct 
@@ -23,7 +24,10 @@ typedef struct
 
 int metricas_CPU(int pid, CpuMetrics *cpu);
 int metricas_switches(int pid, CpuMetrics *cpu);
+
 int metricas_MEM(int pid, MemMetrics *mem);
+int metricas_swap(int pid, MemMetrics *mem);
+
 int metricas_IO(int pid, IoMetrics *io);
 
 #endif
