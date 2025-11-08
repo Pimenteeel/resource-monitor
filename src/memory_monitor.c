@@ -20,7 +20,20 @@ int metricas_swap(int pid, MemMetrics *mem){
     mem -> swap = 0;
     int valor_encontrado = 0;
 
-    
+    while(fgets(buffer, sizeof(buffer), fp) != NULL){
+        if (valor_encontrado == 0 && strstr(buffer, "VmSwap") != NULL){
+            pt = strchr(buffer, ':');
+            if(pt != NULL){
+                mem -> swap = atol(pt);
+                valor_encontrado = 1;
+            }
+        }
+        if(valor_encontrado == 1){
+            break;
+        }
+    }
+
+    fclose(fp);
 
     return 0;
 }

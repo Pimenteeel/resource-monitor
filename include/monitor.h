@@ -13,8 +13,8 @@ typedef struct
 {
     long vsize; //espaço de endereçamento total que o processo reservou
     long rss; // quantidade de memória ram física que o processo está realmente usando no exato momento
-    long page_faults;
-    long swap; 
+    long page_faults; //quando um programa tenta acessar um endereço de memoria que nao esta na ram
+    long swap; //quando a ram fica cheia, o SO pega páginas inativas e guarda Swap OUT
 } MemMetrics;
 
 typedef struct 
