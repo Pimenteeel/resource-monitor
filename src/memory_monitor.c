@@ -24,7 +24,7 @@ int metricas_swap(int pid, MemMetrics *mem){
         if (valor_encontrado == 0 && strstr(buffer, "VmSwap") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
-                mem -> swap = atol(pt + 1);
+                mem -> swap = atol(pt + 1) * 1024;
                 valor_encontrado = 1;
             }
         }
