@@ -26,14 +26,14 @@ int metricas_switches(int pid, CpuMetrics *cpu){
 
     while(fgets(buffer, sizeof(buffer), fp) != NULL){
         if (valor_encontrado_voluntary == 0 && strstr(buffer, "voluntary_ctxt_switches") != NULL){
-            pt = strchr(buffer, ":");
+            pt = strchr(buffer, ':');
             if(pt != NULL){
                 voluntary = atol(pt + 1);
                 valor_encontrado_voluntary = 1;
             }
         }
         if (valor_encontrado_nonvoluntary == 0 && strstr(buffer, "nonvoluntary_ctxt_switches") != NULL){
-            pt = strchr(buffer, ":");
+            pt = strchr(buffer, ':');
             if(pt != NULL){
                 nonvoluntary = atol(pt + 1);
                 valor_encontrado_nonvoluntary = 1;

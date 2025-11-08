@@ -1,62 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "monitor.h"
 
 void monitor_process(int pid){
-    char proc_path[256];
-    FILE *fp;
-
-    sprintf(proc_path, "/proc/%d/stat", pid);
-    fp = (fopen(proc_path, "r"));
-    if(fp == NULL){
-        perror("Erro ao abrir o arquivo /proc");
-        return;
-    }
-
-    char buffer[4096];
-    if (fgets(buffer, sizeof(buffer), fp) == NULL)
-    {
-        fprintf(stderr, "Erro ao ler dados dos arquivos %s\n", proc_path);
-        fclose(fp);
-        return;
-    }
-
-    fclose(fp);
-
-    char *token;
-    int contagem = 1;
-    long user_time   = 0;
-    long system_time = 0;
-    long rss = 0;
-    long vsz = 0;
-
-    token = strtok(buffer, " ");
-
-    while (token != NULL && contagem <= 24){
-        switch (contagem)
-        {
-        case 14:
-            user_time = atol(token);
-            break;
-        case 15:
-            system_time = atol(token);
-            break;
-        case 23:
-            vsz = atol(token);
-            break;
-        case 24:
-            rss = atol(token);
-            break;
-        }
-        token = strtok(NULL, " "); //Continuar a leitura do buffer
-        contagem++;
-    }
     
-    printf("===== Métricas para o PID: %d =====\n", pid);
-    printf("User time: %ld clock ticks\n", user_time);
-    printf("System time: %ld clock tick\n", system_time);
-    printf("Memória virtual: %ld bytes (%.2f MB)\n", vsz, (double)vsz/(1024 * 1024));
-    printf("Memória física: %ld páginas", rss);
+    CpuMetrics dados_CPU;
+
+    if(metricas_CPU(pid, &dados_CPU) != 0){
+        fprintf(stderr, "Não foi possível ler metricas de CPU para o PID %d\n", pid);
+        return;
+    }
+
+    if(metricas_switches(pid, &dados_CPU) != 0){
+        fprintf(stderr, "Não foi possível ler metricas de switches para o PID %d\n", pid);
+        return;
+    }
+
+    printf("==== Métricas para o PID %d ====\n", pid);
+    printf("User time.......: %ld clock ticks\n", dados_CPU.user_time);
+    printf("System time.....: %ld clock ticks\n", dados_CPU.system_time);
+    printf("Threads.........: %ld\n", dados_CPU.threads);
+    printf("Context Switches: %ld\n", dados_CPU.switches);
 
 }
 

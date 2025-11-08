@@ -22,6 +22,7 @@ typedef struct
 } IoMetrics;
 
 int metricas_CPU(int pid, CpuMetrics *cpu);
+int metricas_switches(int pid, CpuMetrics *cpu);
 int metricas_MEM(int pid, MemMetrics *mem);
 int metricas_IO(int pid, IoMetrics *io);
 
