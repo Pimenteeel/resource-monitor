@@ -19,8 +19,10 @@ typedef struct
 
 typedef struct 
 {
-    long read_bytes;
-    long write_bytes;
+    long read_bytes; // quantidade toal de bytes que o programa pediu o SO 
+    long write_bytes; // quantidade total de bytes que o programa enviu para o SO
+    long disk_op; //mede a ação física que o disco teve que fazer
+    long syscall; // quantas vezes o programa pediu algo
 } IoMetrics;
 
 int metricas_CPU(int pid, CpuMetrics *cpu);
