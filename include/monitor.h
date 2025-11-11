@@ -25,6 +25,16 @@ typedef struct
     long syscall; // quantas vezes o programa pediu algo
 } IoMetrics;
 
+typedef struct
+{
+    long bytes_rx; // recebidos
+    long bytes_tx; // transmitidos
+    long packets_rx; // pacotes (enviados e recebidos e enviados)
+    long packets_tx;
+    long connections; // número de links de comunicação ativos que o processo mantém
+} RedeMetrics;
+
+
 int metricas_CPU(int pid, CpuMetrics *cpu);
 int metricas_switches(int pid, CpuMetrics *cpu);
 
@@ -32,5 +42,7 @@ int metricas_MEM(int pid, MemMetrics *mem);
 int metricas_swap(int pid, MemMetrics *mem);
 
 int metricas_IO(int pid, IoMetrics *io);
+
+int metricas_REDE(int pid, RedeMetrics *red);
 
 #endif
