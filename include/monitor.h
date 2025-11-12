@@ -38,6 +38,8 @@ typedef struct
 int metricas_CPU(int pid, CpuMetrics *cpu);
 int metricas_switches(int pid, CpuMetrics *cpu);
 
+long total_ticks_sistema();
+
 int metricas_MEM(int pid, MemMetrics *mem);
 int metricas_swap(int pid, MemMetrics *mem);
 

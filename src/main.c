@@ -4,12 +4,26 @@
 #include <unistd.h>
 #include "monitor.h"
 
+#define INTERVALO 1
+
 void monitor_process(int pid){
     
     CpuMetrics dados_CPU;
     MemMetrics dados_MEM;
     IoMetrics dados_IO;
     RedeMetrics dados_REDE;
+
+    CpuMetrics dados_CPU_ante;
+    IoMetrics dados_IO_ante;
+    RedeMetrics dados_REDE_ante;
+    long ticks_sistema_ante;
+
+    metricas_CPU(pid, &dados_CPU_ante);
+    metricas_IO(pid, &dados_IO_ante);
+    metricas_REDE(pid, &dados_REDE_ante);
+    ticks_sistema_ante = total_ticks_sistema();
+
+    sleep(INTERVALO);
 
     while(1){
 
@@ -45,6 +59,8 @@ void monitor_process(int pid){
             return;
         }
 
+        long ticks_sistema_agora = total_ticks_sistema();
+
         printf("==================== Métricas para o PID %d ====================\n", pid);
         printf("--- Métricas de CPU: ---\n");
         printf("User time..................: %ld clock ticks\n", dados_CPU.user_time);
@@ -70,7 +86,39 @@ void monitor_process(int pid){
         printf("Pacotes recebidos..........: %ld Pacotes\n", dados_REDE.packets_rx);
         printf("Pacotes transmitidos.......: %ld Pacotes\n", dados_REDE.packets_tx);
 
-        sleep(1);
+        long delta_proc = (dados_CPU.user_time + dados_CPU.system_time) - (dados_CPU_ante.user_time + dados_CPU_ante.system_time);
+        long delta_sistema = ticks_sistema_agora - ticks_sistema_ante;
+
+        double cpu_percent = 0.0;
+        if (delta_sistema > 0){
+            cpu_percent = 100.0 * (double)delta_proc / (double)delta_sistema;
+        }
+
+        long delta_read = dados_IO.read_bytes - dados_IO_ante.read_bytes;
+        long delta_write = dados_IO.write_bytes - dados_IO_ante.write_bytes;
+
+        double taxa_leitura_mbs = ( (double)delta_read / (1024*1024)) / INTERVALO;
+        double taxa_escrita_mbs = ( (double)delta_write / (1024*1024)) / INTERVALO;
+
+        long delta_rede_rx = dados_REDE.bytes_rx - dados_REDE_ante.bytes_rx;
+        long delta_rede_tx = dados_REDE.bytes_tx - dados_REDE_ante.bytes_tx;
+
+        double taxa_rede_rx_mbs = ( (double)delta_rede_rx / (1024*1024) ) / INTERVALO;
+        double taxa_rede_tx_mbs = ( (double)delta_rede_tx / (1024*1024) ) / INTERVALO;
+
+        printf("\n--- TAXAS (por %d segundo) ---\n", INTERVALO);
+        printf("Uso de CPU..............: %.2f %%\n", cpu_percent);
+        printf("Taxa de Leitura (I/O)...: %.2f MB/s\n", taxa_leitura_mbs);
+        printf("Taxa de Escrita (I/O)...: %.2f MB/s\n", taxa_escrita_mbs);
+        printf("Taxa de Rede (RX).......: %.2f MB/s\n", taxa_rede_rx_mbs);
+        printf("Taxa de Rede (TX).......: %.2f MB/s\n", taxa_rede_tx_mbs);
+
+        dados_CPU_ante = dados_CPU;
+        dados_IO_ante = dados_IO;
+        dados_REDE_ante = dados_REDE;
+        ticks_sistema_ante = ticks_sistema_agora;
+
+        sleep(INTERVALO);
     }
 }
 

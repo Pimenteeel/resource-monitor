@@ -100,3 +100,34 @@ int metricas_CPU(int pid, CpuMetrics *cpu){
 
     return 0;
 }
+
+long total_ticks_sistema() {
+    FILE *fp;
+    fp = fopen("/proc/stat", "r");
+
+    if (fp == NULL){
+        perror("Erro ao abrir o processo");
+        return -1;
+    }
+
+    char buffer[4096];
+    if(fgets(buffer, sizeof(buffer), fp) == NULL){
+        fclose(fp);
+        return -1;
+    }
+    fclose(fp);
+
+    char *token = strtok(buffer, " ");
+    long total_ticks = 0;
+    int i = 0;
+
+    while((token = strtok(NULL, " ")) != NULL){
+        if (i >= 7){
+            break;
+        }
+        total_ticks = total_ticks + atol(token);
+        i++;
+    }
+
+    return total_ticks;
+}
