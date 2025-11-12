@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h>
 #include "monitor.h"
 
 #define INTERVALO 1
@@ -17,6 +18,13 @@ void monitor_process(int pid){
     IoMetrics dados_IO_ante;
     RedeMetrics dados_REDE_ante;
     long ticks_sistema_ante;
+
+    FILE *log_file = fopen("Resource_Monitor.csv", "w");
+    if (log_file == NULL){
+        perror("Não foi possível criar o arquivo de log .csv");
+        return;
+    }
+    fprintf(log_file, "timestamp,pid,cpu_percent,rss_mb,vsz_mb,swap_mb,total_page_faults,io_read_rate_mbs,io_write_rate_mbs,net_rx_rate_mbs,net_tx_rate_mbs\n");
 
     metricas_CPU(pid, &dados_CPU_ante);
     metricas_IO(pid, &dados_IO_ante);
@@ -113,6 +121,21 @@ void monitor_process(int pid){
         printf("Taxa de Rede (RX).......: %.2f MB/s\n", taxa_rede_rx_mbs);
         printf("Taxa de Rede (TX).......: %.2f MB/s\n", taxa_rede_tx_mbs);
 
+        fprintf(log_file, "%ld,%d,%.2f,%.2ld,%.2ld,%.2ld,%ld,%.2f,%.2f,%.2f,%.2f\n",
+            (long)time(NULL),
+            pid,
+            cpu_percent,
+            dados_MEM.rss,
+            dados_MEM.vsize,
+            dados_MEM.swap,
+            dados_MEM.page_faults,
+            taxa_leitura_mbs,
+            taxa_escrita_mbs,
+            taxa_rede_rx_mbs,
+            taxa_rede_tx_mbs
+        );
+        fflush(log_file);
+
         dados_CPU_ante = dados_CPU;
         dados_IO_ante = dados_IO;
         dados_REDE_ante = dados_REDE;
@@ -120,6 +143,9 @@ void monitor_process(int pid){
 
         sleep(INTERVALO);
     }
+
+    fclose(log_file);
+    printf("\nMonitoramento encerrado. Log salvo em Resource_Monitor.csv\n");
 }
 
 int main(int argc, char *argv[]){
