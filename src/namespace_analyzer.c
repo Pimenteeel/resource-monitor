@@ -11,14 +11,14 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para o mnt
     sprintf(proc_path, "/proc/%d/ns/mnt", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         return -1;
     }
     ns->mnt = (long)buffer.st_ino; //st_ino é o campo que armazena o número do inode (id do ns). o tipo original é ino_t
 
     // lógica para o uts
     sprintf(proc_path, "/proc/%d/ns/uts", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> uts = 0;
     }
     else{
@@ -27,7 +27,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para o ipc
     sprintf(proc_path, "/proc/%d/ns/ipc", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> ipc = 0;
     }
     else{
@@ -36,7 +36,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para o net
     sprintf(proc_path, "/proc/%d/ns/net", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> net = 0;
     }
     else{
@@ -45,7 +45,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para o pid
     sprintf(proc_path, "/proc/%d/ns/pid", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> pid = 0;
     }
     else{
@@ -54,7 +54,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para user
     sprintf(proc_path, "/proc/%d/ns/user", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> user = 0;
     }
     else{
@@ -63,7 +63,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para cgroup
     sprintf(proc_path, "/proc/%d/ns/cgroup", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> cgroup = 0;
     }
     else{
@@ -72,7 +72,7 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     // lógica para time
     sprintf(proc_path, "/proc/%d/ns/time", pid);
-    if (lstat(proc_path, &buffer) == -1){
+    if (stat(proc_path, &buffer) == -1){
         ns -> time = 0;
     }
     else{
