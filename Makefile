@@ -4,10 +4,13 @@
 CC = gcc
 
 # Flags de compilação:
-# -Wall -Wextra = Avisos rigorosos (como você pediu)
+# -Wall -Wextra = Avisos rigorosos
 # -Iinclude      = Diz ao GCC para procurar arquivos .h na pasta "include/"
 # -g             = Adiciona símbolos de debug (para usar com gdb)
 CFLAGS = -Wall -Wextra -Iinclude -g
+
+# Flags de Linkagem (vazio por enquanto, mas definido)
+LDFLAGS =
 
 # --- Variáveis do Projeto ---
 
@@ -15,7 +18,7 @@ CFLAGS = -Wall -Wextra -Iinclude -g
 TARGET = resource-monitor
 
 # Encontra automaticamente TODOS os arquivos .c dentro da pasta src/
-# (Ex: src/main.c, src/cpu_monitor.c, etc.)
+# (Ex: src/main.c, src/cpu_monitor.c, src/namespace_analyzer.c, etc.)
 SRCS = $(wildcard src/*.c)
 
 # Cria a lista de arquivos de objeto (.o) correspondentes
@@ -23,7 +26,7 @@ SRCS = $(wildcard src/*.c)
 OBJS = $(SRCS:.c=.o)
 
 # Encontra automaticamente TODOS os arquivos .h na pasta include/
-HEADERS = $(wildcard include/*.h)	
+HEADERS = $(wildcard include/*.h)
 
 # --- Regras (Rules) ---
 
@@ -50,7 +53,7 @@ src/%.o: src/%.c $(HEADERS)
 # O que acontece quando você digita "make clean"
 # Remove todos os arquivos .o e o programa final
 clean:
-	rm -f $(OBJS) $(TARGET)
+	-rm -f $(OBJS) $(TARGET)
 
 # Regra "rebuild":
 # O que acontece quando você digita "make re"

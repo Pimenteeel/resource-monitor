@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <time.h>
 #include "monitor.h"
+#include "namespace.h"
 
 #define INTERVALO 1
 
@@ -148,20 +149,55 @@ void monitor_process(int pid){
     printf("\nMonitoramento encerrado. Log salvo em Resource_Monitor.csv\n");
 }
 
+void monitorar_namespaces(int pid){
+
+    ProcessNamespaces ns;
+
+    if(namespaces_por_pid(pid, &ns) != 0){
+        fprintf(stderr, "Não foi possível ler namespaces para o PID %d", pid);
+        return;
+    }
+    printf("Listando Namespaces para o PID: %d\n", pid);
+    printf("TIPO     | ID (INODE)\n");
+    printf("---------------------------\n");
+    printf("CGROUP   | %ld\n", ns.cgroup);
+    printf("IPC      | %ld\n", ns.ipc);
+    printf("MNT      | %ld\n", ns.mnt);
+    printf("NET      | %ld\n", ns.net);
+    printf("PID      | %ld\n", ns.pid);
+    printf("TIME     | %ld\n", ns.time);
+    printf("USER     | %ld\n", ns.user);
+    printf("UTS      | %ld\n", ns.uts);
+
+}
+
 int main(int argc, char *argv[]){
-    if (argc != 2){
-        fprintf(stderr, "Uso: %s <PID>\n", argv[0]);
+    if (argc != 3){
+        fprintf(stderr, "Uso: %s <flag> <PID>\n", argv[0]);
+        fprintf(stderr, "Flags:\n");
+        fprintf(stderr, " -r Monitorar Recursos (loop)\n");
+        fprintf(stderr, " -n Listar Namespaces\n");
         return 1;
     }
 
-    int pid = atoi(argv[1]);
+
+    char *flag = argv[1];
+    int pid = atoi(argv[2]);
 
     if (pid <= 0){
-        fprintf(stderr, "PID Inválido: %s\n", argv[1]);
+        fprintf(stderr, "PID Inválido: %s\n", argv[2]);
         return 1;
     }
 
-    monitor_process(pid);
+    if (strcmp(flag, "-r") == 0){
+        monitor_process(pid);
+    }
+    else if (strcmp(flag, "-n") == 0){
+        monitorar_namespaces(pid);
+    }
+    else{
+        fprintf(stderr, "Flag inválida: %s\n", flag);
+    }
 
     return 0;
 }
