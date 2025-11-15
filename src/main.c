@@ -179,6 +179,7 @@ int main(int argc, char *argv[]){
         fprintf(stderr, " -n Listar Namespaces\n");
         fprintf(stderr, " -c <PID1> <PID2> Comparar Namespaces\n");
         fprintf(stderr, " -m Mapear todos os processos\n");
+        fprintf(stderr, " -o Medir overhead de Namespaces\n");
         return 1;
     }
 
@@ -229,6 +230,22 @@ int main(int argc, char *argv[]){
             return 1;
         }
         mapear_todos_processos();
+    }
+    else if (strcmp(flag, "-o") == 0){
+        if (argc != 3){
+            fprintf(stderr, "Erro: A flag -o exige numero de iteracoes\n");
+            fprintf(stderr, "Uso: %s -o <ITERACOES>\n", argv[0]);
+            return 1;
+        }
+
+        long iteracao = atol(argv[2]);
+
+        if (iteracao <= 0){
+            fprintf(stderr, "Numero de iteracoes invalido: %s\n", argv[2]);
+            return 1;
+        }
+
+        namespace_overhead(iteracao);
     }
     else {
         fprintf(stderr, "Flag inválida: %s\n", flag);

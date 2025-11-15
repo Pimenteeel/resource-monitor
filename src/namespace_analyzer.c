@@ -1,3 +1,5 @@
+#define _GNU_SOURCE
+#include <sched.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,7 +7,18 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <ctype.h>
+#include <sys/wait.h>
+#include <time.h>
+#include <signal.h>
 #include "namespace.h"
+
+#define STACK_SIZE (1024 * 64)
+char child_stack[STACK_SIZE];
+int child_fn(void *arg){
+    (void)arg;
+    _exit(0);
+    return 0;
+}
 
 int namespaces_por_pid(int pid, ProcessNamespaces *ns){
     char proc_path[512];
@@ -117,11 +130,20 @@ void mapear_todos_processos(){
     int pid;
     ProcessNamespaces ns;
     char comando_path[512], comando_nome[512];
-    FILE *fp;
+    FILE *fp, *fp_csv;
+    long current_time = time(NULL);
+
+    fp_csv = fopen("Namespace_Report.csv", "w");
+    if (fp_csv == NULL){
+        perror("Erro ao criar o arquivo de report de namespaces");
+        return;
+    }
+    fprintf(fp_csv, "timestamp,pid,comando,cgroup_id,ipc_id,mnt_id,net_id,pid_id,time_id,user_id,uts_id\n");
 
     dir = opendir("/proc");
     if (dir == NULL){
         perror("Erro ao abrir o diretório");
+        fclose(fp_csv);
         return;
     }
     
@@ -147,10 +169,62 @@ void mapear_todos_processos(){
                     strcpy(comando_nome, "?"); //mesmo que o fopen falhe, a variável receberá um "?"
                 }
                 printf("%-10d %-16s %-10ld %-10ld %-10ld\n", pid, comando_nome, ns.net, ns.pid, ns.mnt);
+
+                fprintf(fp_csv, "%ld,%d,%s,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld\n", current_time, pid,comando_nome, ns.cgroup, ns.ipc, ns.mnt, ns.net, ns.pid, ns.time, ns.user, ns.uts);
             }
         }
     }
 
     closedir(dir);
+    fclose(fp_csv);
+    printf("Relatorio de namespaces gerado com sucesso: Namespace_Report.csv\n");
     
+}
+
+void namespace_overhead(long iteracao){
+    struct timespec start, end;
+
+    printf("Calculando Overhead de namespaces\n");
+    printf("Iteracoes: %ld\n", iteracao);
+
+    //teste 1
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (int i = 0; i < iteracao; i++){
+        pid_t pid = fork();
+        if (pid == 0){
+            _exit(0);
+        }
+        else if (pid > 0){
+            waitpid(pid, NULL, 0);
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    long tempo_fork = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+    printf("\n[1] Tempo total (fork, baseline): %.2f ms\n", (double)tempo_fork / 1000000.0 );
+
+    //teste 2
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    for (int i = 0; i < iteracao; i++){
+        pid_t pid = clone(child_fn, child_stack + STACK_SIZE, CLONE_NEWPID | SIGCHLD, NULL);
+
+        if(pid > 0){
+            waitpid(pid, NULL, 0);
+        }
+    }
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    long tempo_clone = (end.tv_sec - start.tv_sec) * 1000000000L + (end.tv_nsec - start.tv_nsec);
+    printf("\n[2] Tempo total (clone + CLONE_NEWPID): %.2f ms\n", (double)tempo_clone / 1000000.0);
+
+    long overhead = tempo_clone - tempo_fork;
+    double media_overhead = (double)overhead / (double)iteracao / 1000.0;
+
+    printf("\n-----------------------------------------------\n");
+    printf("Overhead de Namespace\n");
+    printf("Diferença de tempo total: %.2f ms\n", (double)overhead / 1000000.0);
+    printf("Overhead medio por criacao: %.3f us\n", media_overhead);
+    printf("\n-----------------------------------------------\n");
 }
