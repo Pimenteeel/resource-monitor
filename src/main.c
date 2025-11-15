@@ -172,12 +172,13 @@ void monitorar_namespaces(int pid){
 }
 
 int main(int argc, char *argv[]){
-    if (argc < 3){
-        fprintf(stderr, "Uso: %s <flag> <PID>\n", argv[0]);
+    if (argc < 2){
+        fprintf(stderr, "Uso: %s <flag> <PID> [PID]\n", argv[0]);
         fprintf(stderr, "Flags:\n");
         fprintf(stderr, " -r Monitorar Recursos (loop)\n");
         fprintf(stderr, " -n Listar Namespaces\n");
         fprintf(stderr, " -c <PID1> <PID2> Comparar Namespaces\n");
+        fprintf(stderr, " -m Mapear todos os processos\n");
         return 1;
     }
 
@@ -220,6 +221,14 @@ int main(int argc, char *argv[]){
         }
 
         comparar_namespaces(pid1, pid2);
+    }
+    else if (strcmp(flag, "-m") == 0){
+
+        if (argc != 2){
+            fprintf(stderr, "Erro: A Flag -m não exige PIDs\n");
+            return 1;
+        }
+        mapear_todos_processos();
     }
     else {
         fprintf(stderr, "Flag inválida: %s\n", flag);
