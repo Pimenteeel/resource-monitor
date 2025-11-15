@@ -81,3 +81,30 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns){
 
     return 0;
 }
+
+void comparar_namespaces(int pid1, int pid2){
+    ProcessNamespaces ns1, ns2;
+
+    if (namespaces_por_pid(pid1, &ns1) != 0){
+        fprintf(stderr, "Não foi possível ler namespaces para o PID %d", pid1);
+        return;
+    }
+
+    if (namespaces_por_pid(pid2, &ns2) != 0){
+        fprintf(stderr, "Não foi possível ler namespaces para o PID %d", pid2);
+        return;
+    }
+
+    printf("Comparando Namespaces: PID %d vs PID %d\n", pid1, pid2);
+    printf("TIPO     | PID %d         | PID %d         | IGUAIS?\n", pid1, pid2);
+    printf("------------------------------------------------------\n");
+    printf("CGROUP   |  %ld      |  %ld      | %s\n", ns1.cgroup, ns2.cgroup, (ns1.cgroup == ns2.cgroup) ? "SIM" : "NAO");
+    printf("IPC      |  %ld      |  %ld      | %s\n", ns1.ipc, ns2.ipc, (ns1.ipc == ns2.ipc) ? "SIM" : "NAO");
+    printf("MNT      |  %ld      |  %ld      | %s\n", ns1.mnt, ns2.mnt, (ns1.mnt == ns2.mnt) ? "SIM" : "NAO");
+    printf("NET      |  %ld      |  %ld      | %s\n", ns1.net, ns2.net, (ns1.net == ns2.net) ? "SIM" : "NAO");
+    printf("PID      |  %ld      |  %ld      | %s\n", ns1.pid, ns2.pid, (ns1.pid == ns2.pid) ? "SIM" : "NAO");
+    printf("TIME     |  %ld      |  %ld      | %s\n", ns1.time, ns2.time, (ns1.time == ns2.time) ? "SIM" : "NAO");
+    printf("USER     |  %ld      |  %ld      | %s\n", ns1.user, ns2.user, (ns1.user == ns2.user) ? "SIM" : "NAO");
+    printf("UTS      |  %ld      |  %ld      | %s\n", ns1.uts, ns2.uts, (ns1.uts == ns2.uts) ? "SIM" : "NAO");
+
+}
