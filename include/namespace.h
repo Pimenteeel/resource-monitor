@@ -17,4 +17,6 @@ int namespaces_por_pid(int pid, ProcessNamespaces *ns);
 
 void comparar_namespaces(int pid1, int pid2);
 
+void mapear_todos_processos();
+
 #endif

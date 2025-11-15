@@ -3,6 +3,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <ctype.h>
 #include "namespace.h"
 
 int namespaces_por_pid(int pid, ProcessNamespaces *ns){
@@ -107,4 +109,48 @@ void comparar_namespaces(int pid1, int pid2){
     printf("USER     |  %ld      |  %ld      | %s\n", ns1.user, ns2.user, (ns1.user == ns2.user) ? "SIM" : "NAO");
     printf("UTS      |  %ld      |  %ld      | %s\n", ns1.uts, ns2.uts, (ns1.uts == ns2.uts) ? "SIM" : "NAO");
 
+}
+
+void mapear_todos_processos(){
+    DIR *dir;
+    struct dirent *entrada;
+    int pid;
+    ProcessNamespaces ns;
+    char comando_path[512], comando_nome[512];
+    FILE *fp;
+
+    dir = opendir("/proc");
+    if (dir == NULL){
+        perror("Erro ao abrir o diretório");
+        return;
+    }
+    
+    printf("Mapeando todos os procesos por namespaces\n");
+    printf("%-10s %-16s %-10s %-10s %-10s\n", "PID", "COMANDO", "NET_ID", "PID_ID", "MNT_ID");
+    printf("---------------------------------------------------------------------\n");
+
+    while ((entrada = readdir(dir)) != NULL)
+    {  
+        if (isdigit(entrada -> d_name[0])){
+            pid = atoi(entrada -> d_name);
+
+            if (namespaces_por_pid(pid, &ns) == 0){
+                //nome do comando para o relatorio
+                sprintf(comando_path, "/proc/%d/comm", pid);
+                fp = fopen(comando_path, "r");
+                if (fp != NULL){
+                    fgets(comando_nome, sizeof(comando_nome), fp);
+                    comando_nome[strcspn(comando_nome, "\n")] = 0; // remover o \n
+                    fclose(fp);
+                }
+                else {
+                    strcpy(comando_nome, "?"); //mesmo que o fopen falhe, a variável receberá um "?"
+                }
+                printf("%-10d %-16s %-10ld %-10ld %-10ld\n", pid, comando_nome, ns.net, ns.pid, ns.mnt);
+            }
+        }
+    }
+
+    closedir(dir);
+    
 }
