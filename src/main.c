@@ -172,32 +172,59 @@ void monitorar_namespaces(int pid){
 }
 
 int main(int argc, char *argv[]){
-    if (argc != 3){
+    if (argc < 3){
         fprintf(stderr, "Uso: %s <flag> <PID>\n", argv[0]);
         fprintf(stderr, "Flags:\n");
         fprintf(stderr, " -r Monitorar Recursos (loop)\n");
         fprintf(stderr, " -n Listar Namespaces\n");
+        fprintf(stderr, " -c <PID1> <PID2> Comparar Namespaces\n");
         return 1;
     }
 
 
     char *flag = argv[1];
-    int pid = atoi(argv[2]);
 
-    if (pid <= 0){
-        fprintf(stderr, "PID Inválido: %s\n", argv[2]);
-        return 1;
-    }
+    if (strcmp(flag, "-r") == 0 || strcmp(flag, "-n") == 0){
+        
+        if (argc != 3){
+            fprintf(stderr, "Erro: As flags -r e -n exigem exatamente 1 PID\n");
+            return 1;
+        }
 
-    if (strcmp(flag, "-r") == 0){
-        monitor_process(pid);
+        int pid = atoi(argv[2]);
+        if (pid <= 0){
+            fprintf(stderr, "PID inválido: %s\n", argv[2]);
+            return 1;
+        }
+
+        if (strcmp(flag, "-r") == 0){
+            monitor_process(pid);
+        }
+        else {
+            monitorar_namespaces(pid);
+        }
     }
-    else if (strcmp(flag, "-n") == 0){
-        monitorar_namespaces(pid);
+    else if (strcmp(flag, "-c") == 0){
+
+        if (argc != 4){
+            fprintf(stderr, "Erro: A flag -c exige exatamente 2 PIDs\n");
+            return 1;
+        }
+
+        int pid1 = atoi(argv[2]);
+        int pid2 = atoi(argv[3]);
+
+        if (pid1 <= 0 || pid2 <= 0){
+            fprintf(stderr, "PIDs inválidos: %s e %s\n", argv[2], argv[3]);
+            return 1;
+        }
+
+        comparar_namespaces(pid1, pid2);
     }
-    else{
+    else {
         fprintf(stderr, "Flag inválida: %s\n", flag);
     }
+
 
     return 0;
 }
