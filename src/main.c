@@ -198,6 +198,6 @@ int main(int argc, char *argv[]){
     else{
         fprintf(stderr, "Flag inválida: %s\n", flag);
     }
-
+    printf("teste");
     return 0;
 }
