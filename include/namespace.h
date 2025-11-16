@@ -19,4 +19,6 @@ void comparar_namespaces(int pid1, int pid2);
 
 void mapear_todos_processos();
 
+void namespace_overhead(long iteracao);
+
 #endif

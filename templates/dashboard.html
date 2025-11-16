@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Dashboard com métricas</title>
+
+    <script src = "https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+    .container {
+        display: flex;
+        justify-content: space-around;
+        align-items: flex-start;
+        gap: 20px;
+        margin-top: 20px;
+    }
+
+    .grafico {
+        width: 45%;
+        max-width: 600px;
+    }
+
+    canvas {
+        width: 100% !important;
+        height: 300px !important;
+    }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+
+        <div class="grafico">
+            <h2>Uso de CPU (%)</h2>
+            <canvas id="cpuChart"></canvas>
+        </div>
+
+        <div class="grafico">
+            <h2>Memória (RSS em Mb)</h2>
+            <canvas id="memChart"></canvas>
+        </div>
+
+        <div class="grafico">
+            <h2>I/O de Disco (Mb/s)</h2>
+            <canvas id="ioChart"></canvas>
+        </div>
+
+        <div class="grafico">
+            <h2>Rede (Mb/s)</h2>
+            <canvas id="netChart"></canvas>
+        </div>
+
+    </div>
+
+    <script>
+        async function carregarDados() {
+            const resp = await fetch("/api/dados");
+            const dados = await resp.json();
+
+            if (dados.length == 0) return;
+
+            const labels = dados.map((_, index) => index + 1);
+            const cpu = dados.map(l => l.cpu_percent);
+            const rss = dados.map(l => l.rss_mb / (1024 * 1024));
+            const ioRead = dados.map(l => l.io_read_rate_mbs ?? 0);
+            const ioWrite = dados.map(l => l.io_write_rate_mbs ?? 0);
+            const netRx = dados.map(l => l.net_rx_rate_mbs ?? 0);
+            const netTx = dados.map(l => l.net_tx_rate_mbs ?? 0);
+
+            cpuChart.data.labels = labels;
+            cpuChart.data.datasets[0].data = cpu;
+            cpuChart.update();
+
+            memChart.data.labels = labels;
+            memChart.data.datasets[0].data = rss;
+            memChart.update();
+
+            ioChart.data.labels = labels;
+            ioChart.data.datasets[0].data = ioRead;
+            ioChart.data.datasets[1].data = ioWrite;
+            ioChart.update();
+
+            netChart.data.labels = labels;
+            netChart.data.datasets[0].data = netRx;
+            netChart.data.datasets[1].data = netTx;
+            netChart.update();
+        }
+
+        const cpuChart = new Chart(document.getElementById("cpuChart"), {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "CPU (%)",
+                    data: [],
+                    borderColor: "red"
+                }]
+            },
+            options: {
+                maintainAspectRatio: false
+            }
+        });
+
+        const memChart = new Chart(document.getElementById("memChart"), {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "RSS (Mb)",
+                    data: [],
+                    borderColor: "red"
+                }]
+            },
+            options: {
+                maintainAspectRatio: false
+            }
+        });
+
+        const ioChart = new Chart(document.getElementById("ioChart"), {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Leitura (Mb/s)",
+                    data: [],
+                    borderColor: "green"
+                },
+                {
+                    label: "Escrita (Mb/s)",
+                    data: [],
+                    borderColor: "orange"
+                }]
+            },
+            options: {
+                maintainAspectRatio: false
+            }
+        });
+
+        const netChart = new Chart(document.getElementById("netChart"), {
+            type: "line",
+            data: {
+                labels: [],
+                datasets: [{
+                    label: "Recebido (Mb/s)",
+                    data: [],
+                    borderColor: "purple"
+                },
+                {
+                    label: "Enviado (Mb/s)",
+                    data: [],
+                    borderColor: "brown"
+                }]
+            },
+            options: {
+                maintainAspectRatio: false
+            }
+        });
+
+        setInterval(carregarDados, 5000);
+        carregarDados();
+    </script>
+</body>
+</html>

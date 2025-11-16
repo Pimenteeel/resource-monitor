@@ -5,12 +5,14 @@ CC = gcc
 
 # Flags de compilação:
 # -Wall -Wextra = Avisos rigorosos
-# -Iinclude      = Diz ao GCC para procurar arquivos .h na pasta "include/"
-# -g             = Adiciona símbolos de debug (para usar com gdb)
-CFLAGS = -Wall -Wextra -Iinclude -g
+# -std=gnu11    = Usa o padrão C11 com extensões GNU (necessário para 'clone()')
+# -Iinclude      = Diz ao GCC para procurar arquivos .h na pasta "include/"
+# -g             = Adiciona símbolos de debug (para usar com gdb)
+CFLAGS = -Wall -Wextra -std=gnu11 -Iinclude -g
 
-# Flags de Linkagem (vazio por enquanto, mas definido)
-LDFLAGS =
+# Flags de Linkagem:
+# -lrt           = Linka a biblioteca de tempo real (necessário para 'clock_gettime')
+LDFLAGS = -lrt
 
 # --- Variáveis do Projeto ---
 
@@ -31,15 +33,13 @@ HEADERS = $(wildcard include/*.h)
 # --- Regras (Rules) ---
 
 # A regra padrão (o que acontece quando você digita "make")
-# "all" depende do seu programa (TARGET)
 all: $(TARGET)
 
 # Regra de "Linkagem":
 # Como criar o programa final (TARGET)
-# Depende de todos os arquivos de objeto (.o)
-# Ele junta todos os .o em um único executável
+# Junta todos os .o em um único executável e aplica as flags de linkagem.
 $(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS)
+	$(CC) $(OBJS) -o $@ $(LDFLAGS)
 
 # Regra de "Compilação":
 # Como criar um arquivo .o a partir de um arquivo .c
@@ -50,13 +50,11 @@ src/%.o: src/%.c $(HEADERS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Regra "clean":
-# O que acontece quando você digita "make clean"
 # Remove todos os arquivos .o e o programa final
 clean:
 	-rm -f $(OBJS) $(TARGET)
 
 # Regra "rebuild":
-# O que acontece quando você digita "make re"
 # Limpa tudo e compila do zero
 re: clean all
 
