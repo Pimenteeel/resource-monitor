@@ -1,4 +1,4 @@
-PID_ALVO = $1
+PID_ALVO=$1
 
 if [ -z "$PID_ALVO" ]; then
     echo "Uso: ./compare_tools.sh <PID>"
