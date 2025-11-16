@@ -5,6 +5,7 @@
 #include <time.h>
 #include "monitor.h"
 #include "namespace.h"
+#include "cgroup.h"
 
 #define INTERVALO 1
 
@@ -78,7 +79,7 @@ void monitor_process(int pid){
         printf("Context Switches...........: %ld\n", dados_CPU.switches);
         printf("\n");
         printf("--- Métricas de memória: ---\n");
-        printf("Memória Virtual (VSZ)......: %.2f MB\n", (double)dados_MEM.vsize / (1024 * 1024)); //o double pega as casas decimais para o retorno
+        printf("Memória Virtual (VSZ)......: %.2f MB\n", (double)dados_MEM.vsize / (1024 * 1024));
         printf("Memória Física (RSS).......: %.2f MB\n", (double)dados_MEM.rss / (1024 * 1024));
         printf("Memória em Swap............: %.2f MB\n", (double)dados_MEM.swap / (1024 * 1024));
         printf("Total de Page Faults.......: %ld\n", dados_MEM.page_faults);
@@ -122,13 +123,13 @@ void monitor_process(int pid){
         printf("Taxa de Rede (RX).......: %.2f MB/s\n", taxa_rede_rx_mbs);
         printf("Taxa de Rede (TX).......: %.2f MB/s\n", taxa_rede_tx_mbs);
 
-        fprintf(log_file, "%ld,%d,%.2f,%.2ld,%.2ld,%.2ld,%ld,%.2f,%.2f,%.2f,%.2f\n",
+        fprintf(log_file, "%ld,%d,%.2f,%.2f,%.2f,%.2f,%ld,%.2f,%.2f,%.2f,%.2f\n",
             (long)time(NULL),
             pid,
             cpu_percent,
-            dados_MEM.rss,
-            dados_MEM.vsize,
-            dados_MEM.swap,
+            (double)dados_MEM.rss / (1024 * 1024),
+            (double)dados_MEM.vsize / (1024 * 1024),
+            (double)dados_MEM.swap / (1024 * 1024),
             dados_MEM.page_faults,
             taxa_leitura_mbs,
             taxa_escrita_mbs,
@@ -171,6 +172,210 @@ void monitorar_namespaces(int pid){
 
 }
 
+static void executar_workload_cpu(int iteracoes) {
+    volatile double resultado = 0.0;
+    for (int i = 0; i < iteracoes; i++) {
+        resultado += (i * 3.14159) / 2.71828;
+    }
+}
+
+void ajuda_cgroup() {
+    printf("\nUso das funções CGroup:\n");
+    printf(" -g metrics <cgroup_path>                 Coletar metricas de cgroup\n");
+    printf(" -g create <controller> <nome> <cpu> <mem>  Criar e configurar cgroup\n");
+    printf(" -g throttle                              Conduzir experimentos de throttling\n");
+    printf(" -g memlimit                              Conduzir experimento de limite de memoria\n");
+    printf(" -g report <cgroup_path>                  Gerar relatorio de utilizacao\n");
+}
+
+void conduzir_experimentos_throttling(void) {
+    printf("EXPERIMENTO 3: THROTTLING DE CPU\n");
+    printf("=================================\n\n");
+    
+    double limites[] = {0.25, 0.5, 1.0, 2.0};
+    int num_limites = sizeof(limites) / sizeof(limites[0]);
+    
+    printf("LIMITE (cores) | CPU%% MEDIDO | THROUGHPUT (iter/s) | DESVIO%%\n");
+    printf("---------------------------------------------------------------\n");
+    
+    for (int i = 0; i < num_limites; i++) {
+        double limite = limites[i];
+        char cgroup_name[64];
+        snprintf(cgroup_name, sizeof(cgroup_name), "throttle_%.2f", limite);
+        
+        if (!criar_configurar_cgroup("cpu", cgroup_name, limite, 0)) {
+            continue;
+        }
+        
+        char cgroup_path[MAX_PATH];
+        int written = snprintf(cgroup_path, sizeof(cgroup_path), "/sys/fs/cgroup/%s", cgroup_name);
+        if (written >= (int)sizeof(cgroup_path)) {
+            fprintf(stderr, "Caminho do cgroup muito longo\n");
+            continue;
+        }
+        
+        char metric_path[MAX_PATH];
+        written = snprintf(metric_path, sizeof(metric_path), "%s/cpu.stat", cgroup_path);
+        if (written >= (int)sizeof(metric_path)) {
+            fprintf(stderr, "Caminho da metrica CPU muito longo\n");
+            continue;
+        }
+        
+        unsigned long long uso_cpu_antes = 0;
+        FILE* cpu_file = fopen(metric_path, "r");
+        if (cpu_file) {
+            char line[256];
+            while (fgets(line, sizeof(line), cpu_file)) {
+                if (strstr(line, "usage_usec")) {
+                    sscanf(line, "usage_usec %llu", &uso_cpu_antes);
+                    uso_cpu_antes *= 1000; // converter para nanosegundos
+                }
+            }
+    fclose(cpu_file);
+        }
+        
+        if (!move_process_to_cgroup(cgroup_path, getpid())) {
+            continue;
+        }
+        
+        struct timespec inicio, fim;
+        clock_gettime(CLOCK_MONOTONIC, &inicio);
+        
+        int iteracoes = 50000000;
+        executar_workload_cpu(iteracoes);
+        
+        clock_gettime(CLOCK_MONOTONIC, &fim);
+        
+        double tempo_decorrido_ns = (fim.tv_sec - inicio.tv_sec) * 1e9 + (fim.tv_nsec - inicio.tv_nsec);
+        double tempo_decorrido_s = tempo_decorrido_ns / 1e9;
+        
+        unsigned long long uso_cpu_depois = 0;
+        cpu_file = fopen(metric_path, "r");
+        if (cpu_file) {
+            char line[256];
+            while (fgets(line, sizeof(line), cpu_file)) {
+                if (strstr(line, "usage_usec")) {
+                    sscanf(line, "usage_usec %llu", &uso_cpu_depois);
+                    uso_cpu_depois *= 1000; // converter para nanosegundos
+                }
+            }
+    fclose(cpu_file);
+        }
+        
+        unsigned long long delta_cpu_ns = uso_cpu_depois - uso_cpu_antes;
+        double cpu_percent = (delta_cpu_ns / tempo_decorrido_ns) * 100.0;
+        
+        double throughput = iteracoes / tempo_decorrido_s;
+        
+        double desvio_percentual = ((cpu_percent - (limite * 100)) / (limite * 100)) * 100;
+        
+        printf("%.2f           | %-10.1f  | %-18.0f  | %-7.1f\n", 
+               limite, cpu_percent, throughput, desvio_percentual);
+        
+        char procs_path[MAX_PATH];
+        written = snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
+        if (written < (int)sizeof(procs_path)) {
+            write_to_file(procs_path, "0");
+        }
+        
+        sleep(1);
+        rmdir(cgroup_path);
+        
+        if (i < num_limites - 1) sleep(1);
+    }
+    
+    printf("---------------------------------------------------------------\n");
+    printf("Experimento de throttling concluido\n");
+}
+
+void experimento_limite_memoria(void) {
+    printf("\nEXPERIMENTO 4: LIMITACAO DE MEMORIA\n");
+    printf("==================================\n");
+    
+    printf("Procedimento:\n");
+    printf("1. Criar cgroup com limite de 100MB\n");
+    printf("2. Tentar alocar memoria incrementalmente\n");
+    printf("3. Observar comportamento (OOM killer, falhas de alocacao)\n\n");
+    
+    if (!criar_configurar_cgroup("memory", "exp_memoria", 0, 100)) {
+        return;
+    }
+    
+    char cgroup_path[MAX_PATH];
+    int written = snprintf(cgroup_path, sizeof(cgroup_path), "/sys/fs/cgroup/exp_memoria");
+    if (written >= (int)sizeof(cgroup_path)) {
+        fprintf(stderr, "Caminho do cgroup memoria muito longo\n");
+        return;
+    }
+    
+    if (!move_process_to_cgroup(cgroup_path, getpid())) {
+        return;
+    }
+    
+    printf("TESTE DE ALOCACAO DE MEMORIA:\n");
+    printf("Tentativa | Tamanho (MB) | Status\n");
+    printf("-----------------------------------\n");
+    
+    size_t tamanhos_mb[] = {10, 25, 50, 75, 100, 110, 120};
+    int num_testes = sizeof(tamanhos_mb) / sizeof(tamanhos_mb[0]);
+    
+    size_t max_alocado = 0;
+    int falhas = 0;
+    
+    for (int i = 0; i < num_testes; i++) {
+        size_t tamanho_mb = tamanhos_mb[i];
+        size_t tamanho_bytes = tamanho_mb * 1024 * 1024;
+        
+        void* memoria = malloc(tamanho_bytes);
+        
+        if (memoria != NULL) {
+            memset(memoria, 0xFF, tamanho_bytes);
+            
+            printf("%-9d | %-12zu | ALOCADO\n", i + 1, tamanho_mb);
+            max_alocado = tamanho_mb;
+            free(memoria);
+        } else {
+            printf("%-9d | %-12zu | FALHA\n", i + 1, tamanho_mb);
+            falhas++;
+            break;
+        }
+        
+        char metric_path[MAX_PATH];
+        written = snprintf(metric_path, sizeof(metric_path), "%s/memory.current", cgroup_path);
+        if (written < (int)sizeof(metric_path)) {
+            long memoria_atual = read_from_file_long(metric_path);
+            printf("           |              | Memoria atual: %.2f MB\n", 
+                   (double)memoria_atual / (1024 * 1024));
+        }
+        
+        sleep(1);
+    }
+    
+    char metric_path[MAX_PATH];
+    int written_failcnt = snprintf(metric_path, sizeof(metric_path), "%s/memory.events", cgroup_path);
+    long failcnt = 0;
+    if (written_failcnt < (int)sizeof(metric_path)) {
+        failcnt = read_from_file_long(metric_path);
+    }
+    
+    printf("\nRESULTADOS FINAIS:\n");
+    printf("----------------------------------------\n");
+    printf("Quantidade maxima alocada: %zu MB\n", max_alocado);
+    printf("Numero de falhas: %d\n", falhas);
+    printf("Contador de falhas (memory.failcnt): %ld\n", failcnt);
+    printf("Comportamento: %s\n", 
+           falhas > 0 ? "Falha de alocacao ao atingir limite" : "Todas alocacoes bem-sucedidas");
+    printf("----------------------------------------\n");
+    
+    char procs_path[MAX_PATH];
+    written = snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
+    if (written < (int)sizeof(procs_path)) {
+        write_to_file(procs_path, "0");
+    }
+    sleep(1);
+    rmdir(cgroup_path);
+}
+
 int main(int argc, char *argv[]){
     if (argc < 2){
         fprintf(stderr, "Uso: %s <flag> <PID> [PID]\n", argv[0]);
@@ -180,9 +385,9 @@ int main(int argc, char *argv[]){
         fprintf(stderr, " -c <PID1> <PID2> Comparar Namespaces\n");
         fprintf(stderr, " -m Mapear todos os processos\n");
         fprintf(stderr, " -o Medir overhead de Namespaces\n");
+        fprintf(stderr, " -g Funções relacionadas a CGroup\n");
         return 1;
     }
-
 
     char *flag = argv[1];
 
@@ -247,10 +452,54 @@ int main(int argc, char *argv[]){
 
         namespace_overhead(iteracao);
     }
-    else {
-        fprintf(stderr, "Flag inválida: %s\n", flag);
+    else if (strcmp(flag, "-g") == 0) {
+    if (argc < 3) {
+        ajuda_cgroup();
+        return 1;
     }
 
+    char* subcomando = argv[2];
+
+    if (strcmp(subcomando, "metrics") == 0) {
+        if (argc == 4) {
+            coletar_metricas_cgroup(argv[3]);
+        } else {
+            printf("Erro: Uso: -g metrics <cgroup_path>\n");
+            ajuda_cgroup();
+            return 1;
+        }
+    }
+    else if (strcmp(subcomando, "create") == 0) {
+        if (argc == 7) {
+            double cpu = atof(argv[5]);
+            long mem = atol(argv[6]);
+            criar_configurar_cgroup(argv[3], argv[4], cpu, mem);
+        } else {
+            printf("Erro: Uso: -g create <controller> <nome> <cpu> <mem>\n");
+            ajuda_cgroup();
+            return 1;
+        }
+    }
+    else if (strcmp(subcomando, "throttle") == 0) {
+        conduzir_experimentos_throttling();
+    }
+    else if (strcmp(subcomando, "memlimit") == 0) {
+        experimento_limite_memoria();
+    }
+    else if (strcmp(subcomando, "report") == 0) {
+        if (argc == 4) {
+            gerar_relatorio_utilizacao(argv[3]);
+        } else {
+            printf("Erro: Uso: -g report <cgroup_path>\n");
+            ajuda_cgroup();
+            return 1;
+        }
+    }
+    else {
+        ajuda_cgroup();
+        return 1;
+    }
+}
 
     return 0;
 }

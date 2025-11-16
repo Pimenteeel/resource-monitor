@@ -5,13 +5,13 @@ CC = gcc
 
 # Flags de compilação:
 # -Wall -Wextra = Avisos rigorosos
-# -std=gnu11    = Usa o padrão C11 com extensões GNU (necessário para 'clone()')
-# -Iinclude      = Diz ao GCC para procurar arquivos .h na pasta "include/"
-# -g             = Adiciona símbolos de debug (para usar com gdb)
+# -std=gnu11    = Usa o padrão C11 com extensões GNU (necessário para 'clone()')
+# -Iinclude     = Diz ao GCC para procurar arquivos .h na pasta "include/"
+# -g            = Adiciona símbolos de debug (para usar com gdb)
 CFLAGS = -Wall -Wextra -std=gnu11 -Iinclude -g
 
 # Flags de Linkagem:
-# -lrt           = Linka a biblioteca de tempo real (necessário para 'clock_gettime')
+# -lrt          = Linka a biblioteca de tempo real (necessário para 'clock_gettime')
 LDFLAGS = -lrt
 
 # --- Variáveis do Projeto ---
@@ -60,3 +60,34 @@ re: clean all
 
 # Avisa ao 'make' que 'all', 'clean', e 're' não são nomes de arquivos
 .PHONY: all clean re
+
+# ============================================================================
+# REGRAS PARA TESTES (ACRESCENTADAS - SEM MODIFICAR O EXISTENTE)
+# ============================================================================
+
+# Compilar teste CPU-intensive
+test_cpu: tests/test_cpu.c
+	$(CC) $(CFLAGS) -o test_cpu tests/test_cpu.c -lm -lpthread
+
+# Compilar teste Memory-intensive  
+test_memory: tests/test_memory.c
+	$(CC) $(CFLAGS) -o test_memory tests/test_memory.c
+
+# Compilar teste I/O-intensive
+test_io: tests/test_io.c
+	$(CC) $(CFLAGS) -o test_io tests/test_io.c
+
+# Compilar todos os testes
+tests: test_cpu test_memory test_io
+	@echo "Todos os testes compilados!"
+
+# Limpar testes
+clean-tests:
+	-rm -f test_cpu test_memory test_io
+	-rm -f test_file_*.dat
+
+# Limpar tudo (projeto + testes)
+clean-all: clean clean-tests
+
+# Regras phony para os testes
+.PHONY: test_cpu test_memory test_io tests clean-tests clean-all
