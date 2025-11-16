@@ -1,577 +1,293 @@
 #include "cgroup.h"
-#include <math.h>
-#include <signal.h>
-
-// Variável global para histórico
-static CgroupHistory *global_history = NULL;
-
-// ============================================================================
-// FUNÇÕES DE GERENCIAMENTO DO KERNEL (OBRIGATÓRIAS)
-// ============================================================================
-
-// Função auxiliar para escrever em arquivos do cgroup
-static int write_cgroup_file(const char *cgroup_path, const char *filename, const char *value) {
-    char filepath[512];
-    snprintf(filepath, sizeof(filepath), "%s/%s", cgroup_path, filename);
-    
-    FILE *file = fopen(filepath, "w");
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
+#include <time.h>
+bool write_to_file(const char* filepath, const char* value) {
+    FILE* file = fopen(filepath, "w");
     if (!file) {
-        perror("Erro ao abrir arquivo do cgroup para escrita");
-        return -1;
+        fprintf(stderr, "Erro ao abrir %s: %s\n", filepath, strerror(errno));
+        return false;
     }
     
     if (fprintf(file, "%s", value) < 0) {
-        perror("Erro ao escrever no arquivo do cgroup");
+        fprintf(stderr, "Erro ao escrever em %s: %s\n", filepath, strerror(errno));
         fclose(file);
-        return -1;
+        return false;
     }
     
     fclose(file);
-    return 0;
+    return true;
 }
 
-// Função auxiliar para ler de arquivos do cgroup
-static int read_cgroup_file(const char *cgroup_path, const char *filename, char *buffer, size_t buffer_size) {
-    char filepath[512];
-    snprintf(filepath, sizeof(filepath), "%s/%s", cgroup_path, filename);
-    
-    FILE *file = fopen(filepath, "r");
+unsigned long long read_from_file_ull(const char* filepath) {
+    FILE* file = fopen(filepath, "r");
     if (!file) {
+        fprintf(stderr, "Erro ao abrir %s: %s\n", filepath, strerror(errno));
+        return 0;
+    }
+    
+    unsigned long long value;
+    if (fscanf(file, "%llu", &value) != 1) {
+        fprintf(stderr, "Erro ao ler de %s\n", filepath);
+        fclose(file);
+        return 0;
+    }
+    
+    fclose(file);
+    return value;
+}
+
+long read_from_file_long(const char* filepath) {
+    FILE* file = fopen(filepath, "r");
+    if (!file) {
+        fprintf(stderr, "Erro ao abrir %s: %s\n", filepath, strerror(errno));
         return -1;
     }
     
-    if (!fgets(buffer, buffer_size, file)) {
+    long value;
+    if (fscanf(file, "%ld", &value) != 1) {
+        fprintf(stderr, "Erro ao ler de %s\n", filepath);
         fclose(file);
         return -1;
     }
     
-    buffer[strcspn(buffer, "\n")] = 0;
     fclose(file);
-    return 0;
+    return value;
 }
 
-// Função auxiliar para construir caminho do cgroup
-static void build_cgroup_path(const char *cgroup_name, char *path_buffer) {
-    snprintf(path_buffer, 512, "%s/%s", CGROUP_BASE_PATH, cgroup_name);
-}
 
-int cgroup_create(const char *cgroup_name) {
-    char cgroup_path[512];
-    build_cgroup_path(cgroup_name, cgroup_path);
+bool coletar_metricas_cgroup(const char* cgroup_path) {
+    printf("COLETANDO METRICAS DO CGROUP: %s\n", cgroup_path);
     
-    if (mkdir(cgroup_path, 0755) != 0) {
-        if (errno == EEXIST) {
-            printf("Cgroup '%s' ja existe\n", cgroup_name);
-            return 0;
+    struct stat st;
+    if (stat(cgroup_path, &st) != 0) {
+        fprintf(stderr, "ERRO: Cgroup nao existe: %s\n", cgroup_path);
+        return false;
+    }
+    
+    printf("----------------------------------------\n");
+    printf("METRICA                      | VALOR    \n");
+    printf("----------------------------------------\n");
+    
+    // Ler métricas reais dos arquivos
+    char metric_path[MAX_PATH];
+    
+    // CPU usage (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/cpu.stat", cgroup_path);
+    FILE* cpu_file = fopen(metric_path, "r");
+    unsigned long long cpu_usage = 0;
+    if (cpu_file) {
+        char line[256];
+        while (fgets(line, sizeof(line), cpu_file)) {
+            if (strstr(line, "usage_usec")) {
+                sscanf(line, "usage_usec %llu", &cpu_usage);
+                cpu_usage *= 1000; // converter para nanosegundos
+            }
         }
-        perror("Erro ao criar cgroup");
-        return -1;
+        fclose(cpu_file);
+        printf("Uso de CPU (cpu.stat)       | %llu ns\n", cpu_usage);
+    } else {
+        printf("Uso de CPU (cpu.stat)       | 0 ns\n");
     }
     
-    printf("Cgroup '%s' criado com sucesso\n", cgroup_name);
-    return 0;
-}
-
-int cgroup_delete(const char *cgroup_name) {
-    char cgroup_path[512];
-    build_cgroup_path(cgroup_name, cgroup_path);
+    // Memory usage (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/memory.current", cgroup_path);
+    long memory_usage = read_from_file_long(metric_path);
+    printf("Uso de Memoria              | %.1f MB\n", (double)memory_usage / (1024 * 1024));
     
-    // Primeiro, remover todos os processos do cgroup
-    write_cgroup_file(cgroup_path, "cgroup.procs", "0");
-    
-    if (rmdir(cgroup_path) != 0) {
-        perror("Erro ao deletar cgroup");
-        return -1;
+    // Memory limit (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/memory.max", cgroup_path);
+    long memory_limit = read_from_file_long(metric_path);
+    if (memory_limit == 9223372036854775807L) { // valor máximo significa sem limite
+        printf("Limite de Memoria           | SEM LIMITE\n");
+    } else {
+        printf("Limite de Memoria           | %.1f MB\n", (double)memory_limit / (1024 * 1024));
     }
     
-    printf("Cgroup '%s' deletado com sucesso\n", cgroup_name);
-    return 0;
+    // Memory fail count (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/memory.events", cgroup_path);
+    FILE* mem_events = fopen(metric_path, "r");
+    long memory_failcnt = 0;
+    if (mem_events) {
+        char line[256];
+        while (fgets(line, sizeof(line), mem_events)) {
+            if (strstr(line, "oom_kill")) {
+                sscanf(line, "oom_kill %ld", &memory_failcnt);
+            }
+        }
+        fclose(mem_events);
+        printf("Falhas de Memoria (OOM)     | %ld\n", memory_failcnt);
+    } else {
+        printf("Falhas de Memoria (OOM)     | 0\n");
+    }
+    
+    // PIDs current (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/cgroup.procs", cgroup_path);
+    FILE* procs_file = fopen(metric_path, "r");
+    long pids_current = 0;
+    if (procs_file) {
+        char line[32];
+        while (fgets(line, sizeof(line), procs_file)) {
+            pids_current++;
+        }
+        fclose(procs_file);
+        printf("PIDs atuais                 | %ld\n", pids_current);
+    } else {
+        printf("PIDs atuais                 | 0\n");
+    }
+    
+    printf("----------------------------------------\n");
+    
+    return true;
 }
 
-int cgroup_add_process(const char *cgroup_name, int pid) {
-    char cgroup_path[512];
-    build_cgroup_path(cgroup_name, cgroup_path);
+
+bool criar_configurar_cgroup(const char* controller, const char* name, double cpu_cores, long memoria_mb) {
+    char cgroup_path[MAX_PATH];
+    // CGROUPS V2: tudo na mesma pasta
+    snprintf(cgroup_path, sizeof(cgroup_path), "/sys/fs/cgroup/%s", name);
     
-    char pid_str[16];
+    printf("CRIANDO E CONFIGURANDO CGROUP:\n");
+    printf("Controlador: %s\n", controller);
+    printf("Nome: %s\n", name);
+    printf("CPU: %.2f cores\n", cpu_cores);
+    printf("Memoria: %ld MB\n", memoria_mb);
+    
+    // Criar diretório do cgroup
+    if (mkdir(cgroup_path, 0755) != 0) {
+        if (errno != EEXIST) {
+            fprintf(stderr, "Erro ao criar cgroup %s: %s\n", cgroup_path, strerror(errno));
+            return false;
+        }
+        printf("Cgroup ja existe: %s\n", cgroup_path);
+    } else {
+        printf("Cgroup criado: %s\n", cgroup_path);
+    }
+    
+    // Configurar limite de CPU se especificado 
+    if (cpu_cores > 0) {
+        long quota_us = (long)(cpu_cores * 100000);
+        
+        char filepath[MAX_PATH * 2];
+        snprintf(filepath, sizeof(filepath), "%s/cpu.max", cgroup_path);
+        char quota_str[32];
+        snprintf(quota_str, sizeof(quota_str), "%ld 100000", quota_us);
+        
+        if (!write_to_file(filepath, quota_str)) {
+            fprintf(stderr, "Erro ao configurar limite de CPU\n");
+            return false;
+        }
+        
+        printf("CPU configurado: max=%ldus, period=100000us\n", quota_us);
+    }
+    
+    if (memoria_mb > 0) {
+        long memoria_bytes = memoria_mb * 1024 * 1024;
+        
+        char filepath[MAX_PATH];
+        snprintf(filepath, sizeof(filepath), "%s/memory.max", cgroup_path);
+        char memory_str[32];
+        snprintf(memory_str, sizeof(memory_str), "%ld", memoria_bytes);
+        
+        if (!write_to_file(filepath, memory_str)) {
+            fprintf(stderr, "Erro ao configurar limite de memoria\n");
+            return false;
+        }
+        
+        printf("Memoria configurada: %ld bytes\n", memoria_bytes);
+    }
+    
+    printf("Cgroup criado e configurado com sucesso\n");
+    return true;
+}
+
+
+
+bool move_process_to_cgroup(const char* cgroup_path, int pid) {
+    char filepath[MAX_PATH];
+    
+    if (pid <= 0) {
+        fprintf(stderr, "PID invalido: %d\n", pid);
+        return false;
+    }
+    
+    snprintf(filepath, sizeof(filepath), "%s/cgroup.procs", cgroup_path);
+    char pid_str[32];
     snprintf(pid_str, sizeof(pid_str), "%d", pid);
     
-    if (write_cgroup_file(cgroup_path, "cgroup.procs", pid_str) != 0) {
-        fprintf(stderr, "Erro ao adicionar processo %d ao cgroup '%s'\n", pid, cgroup_name);
-        return -1;
+    if (!write_to_file(filepath, pid_str)) {
+        fprintf(stderr, "Erro ao mover processo %d para cgroup\n", pid);
+        return false;
     }
     
-    printf("Processo %d adicionado ao cgroup '%s'\n", pid, cgroup_name);
-    return 0;
+    printf("Processo %d movido para cgroup: %s\n", pid, cgroup_path);
+    return true;
 }
 
-int cgroup_set_limits(const char *cgroup_name, const CgroupLimits *limits) {
-    char cgroup_path[512];
-    build_cgroup_path(cgroup_name, cgroup_path);
-    char value[64];
-    int success_count = 0;
-    
-    // Configurar limite de CPU
-    if (limits->cpu_limit > 0) {
-        long period = 100000; // 100ms em microssegundos
-        long quota = (long)(limits->cpu_limit * period);
-        
-        snprintf(value, sizeof(value), "%ld", period);
-        if (write_cgroup_file(cgroup_path, "cpu.cfs_period_us", value) == 0) {
-            snprintf(value, sizeof(value), "%ld", quota);
-            if (write_cgroup_file(cgroup_path, "cpu.cfs_quota_us", value) == 0) {
-                success_count++;
-                printf("Limite de CPU: %.2f cores\n", limits->cpu_limit);
-            }
-        }
-    }
-    
-    // Configurar limite de memoria
-    if (limits->memory_limit > 0) {
-        snprintf(value, sizeof(value), "%ld", limits->memory_limit);
-        if (write_cgroup_file(cgroup_path, "memory.limit_in_bytes", value) == 0) {
-            success_count++;
-            printf("Limite de Memoria: %.2f MB\n", limits->memory_limit / (1024.0 * 1024.0));
-        }
-    }
-    
-    // Configurar limite de PIDs
-    if (limits->pids_limit > 0) {
-        snprintf(value, sizeof(value), "%ld", limits->pids_limit);
-        if (write_cgroup_file(cgroup_path, "pids.max", value) == 0) {
-            success_count++;
-            printf("Limite de PIDs: %ld\n", limits->pids_limit);
-        }
-    }
-    
-    printf("%d limites configurados para cgroup '%s'\n", success_count, cgroup_name);
-    return success_count;
-}
 
-int cgroup_get_metrics(const char *cgroup_name, CgroupMetrics *metrics) {
-    char cgroup_path[512];
-    build_cgroup_path(cgroup_name, cgroup_path);
-    char buffer[128];
+void gerar_relatorio_utilizacao(const char* cgroup_path) {
+    printf("GERANDO RELATORIO DE UTILIZACAO: %s\n", cgroup_path);
     
-    // Inicializar estrutura
-    memset(metrics, 0, sizeof(CgroupMetrics));
-    metrics->timestamp = time(NULL);
-    
-    // Ler metricas de CPU
-    if (read_cgroup_file(cgroup_path, "cpuacct.usage", buffer, sizeof(buffer)) == 0) {
-        metrics->cpu_usage = atol(buffer);
-    }
-    
-    if (read_cgroup_file(cgroup_path, "cpuacct.usage_user", buffer, sizeof(buffer)) == 0) {
-        metrics->cpu_usage_user = atol(buffer);
-    }
-    
-    if (read_cgroup_file(cgroup_path, "cpuacct.usage_system", buffer, sizeof(buffer)) == 0) {
-        metrics->cpu_usage_system = atol(buffer);
-    }
-    
-    // Ler metricas de memoria
-    if (read_cgroup_file(cgroup_path, "memory.usage_in_bytes", buffer, sizeof(buffer)) == 0) {
-        metrics->memory_usage = atol(buffer);
-    }
-    
-    if (read_cgroup_file(cgroup_path, "memory.limit_in_bytes", buffer, sizeof(buffer)) == 0) {
-        metrics->memory_limit = atol(buffer);
-    }
-    
-    if (read_cgroup_file(cgroup_path, "memory.failcnt", buffer, sizeof(buffer)) == 0) {
-        metrics->memory_failcnt = atol(buffer);
-    }
-    
-    // Ler metricas de PIDs
-    if (read_cgroup_file(cgroup_path, "pids.current", buffer, sizeof(buffer)) == 0) {
-        metrics->pids_current = atol(buffer);
-    }
-    
-    if (read_cgroup_file(cgroup_path, "pids.max", buffer, sizeof(buffer)) == 0) {
-        if (strcmp(buffer, "max") == 0) {
-            metrics->pids_limit = -1; // Ilimitado
-        } else {
-            metrics->pids_limit = atol(buffer);
-        }
-    }
-    
-    return 0;
-}
-
-int cgroup_list_all(char ***cgroups_list, int *count) {
-    DIR *dir;
-    struct dirent *entry;
-    char **list = NULL;
-    int c = 0;
-    
-    dir = opendir(CGROUP_BASE_PATH);
-    if (!dir) {
-        perror("Erro ao abrir diretorio de cgroups");
-        return -1;
-    }
-    
-    // Contar cgroups
-    while ((entry = readdir(dir)) != NULL) {
-        if (entry->d_type == DT_DIR && 
-            strcmp(entry->d_name, ".") != 0 && 
-            strcmp(entry->d_name, "..") != 0) {
-            c++;
-        }
-    }
-    
-    rewinddir(dir);
-    
-    // Alocar memoria para a lista
-    list = malloc(c * sizeof(char*));
-    if (!list) {
-        closedir(dir);
-        return -1;
-    }
-    
-    int i = 0;
-    while ((entry = readdir(dir)) != NULL && i < c) {
-        if (entry->d_type == DT_DIR && 
-            strcmp(entry->d_name, ".") != 0 && 
-            strcmp(entry->d_name, "..") != 0) {
-            
-            list[i] = strdup(entry->d_name);
-            if (!list[i]) {
-                // Liberar memoria em caso de erro
-                for (int j = 0; j < i; j++) {
-                    free(list[j]);
-                }
-                free(list);
-                closedir(dir);
-                return -1;
-            }
-            i++;
-        }
-    }
-    
-    closedir(dir);
-    *cgroups_list = list;
-    *count = c;
-    return 0;
-}
-
-void cgroup_free_list(char **cgroups_list, int count) {
-    for (int i = 0; i < count; i++) {
-        free(cgroups_list[i]);
-    }
-    free(cgroups_list);
-}
-
-void cgroup_print_metrics(const CgroupMetrics *metrics) {
-    printf("\n=== METRICAS DO CGROUP ===\n");
-    printf("Timestamp: %s", ctime(&metrics->timestamp));
-    printf("CPU Usage: %.2f ms\n", metrics->cpu_usage / 1000000.0);
-    printf("CPU User: %.2f ms\n", metrics->cpu_usage_user / 1000000.0);
-    printf("CPU System: %.2f ms\n", metrics->cpu_usage_system / 1000000.0);
-    printf("Memory Usage: %.2f MB", metrics->memory_usage / (1024.0 * 1024.0));
-    
-    if (metrics->memory_limit > 0) {
-        printf(" / %.2f MB (%.1f%%)\n", 
-               metrics->memory_limit / (1024.0 * 1024.0),
-               (metrics->memory_usage * 100.0) / metrics->memory_limit);
-    } else {
-        printf(" / unlimited\n");
-    }
-    
-    printf("Memory Failures: %ld\n", metrics->memory_failcnt);
-    printf("PIDs: %ld", metrics->pids_current);
-    
-    if (metrics->pids_limit > 0) {
-        printf(" / %ld (%.1f%%)\n", metrics->pids_limit,
-               (metrics->pids_current * 100.0) / metrics->pids_limit);
-    } else {
-        printf(" / unlimited\n");
-    }
-}
-
-// ============================================================================
-// FUNÇÕES DE RELATÓRIOS E VISUALIZAÇÃO (OPCIONAIS - PONTOS EXTRAS)
-// ============================================================================
-
-CgroupHistory* cgroup_history_create(int initial_capacity) {
-    CgroupHistory *history = malloc(sizeof(CgroupHistory));
-    if (!history) return NULL;
-    
-    history->metrics = malloc(initial_capacity * sizeof(CgroupMetrics));
-    if (!history->metrics) {
-        free(history);
-        return NULL;
-    }
-    
-    history->count = 0;
-    history->capacity = initial_capacity;
-    return history;
-}
-
-void cgroup_history_add(CgroupHistory *history, const CgroupMetrics *metrics) {
-    if (history->count >= history->capacity) {
-        int new_capacity = history->capacity * 2;
-        CgroupMetrics *new_metrics = realloc(history->metrics, new_capacity * sizeof(CgroupMetrics));
-        if (!new_metrics) return;
-        
-        history->metrics = new_metrics;
-        history->capacity = new_capacity;
-    }
-    
-    history->metrics[history->count] = *metrics;
-    history->count++;
-}
-
-void cgroup_history_free(CgroupHistory *history) {
-    if (history) {
-        free(history->metrics);
-        free(history);
-    }
-}
-
-int cgroup_start_monitoring(const char *cgroup_name, int interval_sec, int duration_sec) {
-    if (!global_history) {
-        global_history = cgroup_history_create(100);
-        if (!global_history) {
-            return -1;
-        }
-    }
-    
-    printf("\nINICIANDO MONITORAMENTO DO CGROUP '%s'\n", cgroup_name);
-    printf("Duracao: %d segundos | Intervalo: %d segundos\n", duration_sec, interval_sec);
-    
-    time_t start_time = time(NULL);
-    int samples = 0;
-    
-    while (time(NULL) - start_time < duration_sec) {
-        CgroupMetrics metrics;
-        if (cgroup_get_metrics(cgroup_name, &metrics) == 0) {
-            metrics.timestamp = time(NULL);
-            cgroup_history_add(global_history, &metrics);
-            samples++;
-            
-            printf("Amostra %d - CPU: %.2fms, Mem: %.2fMB, PIDs: %ld\n", 
-                   samples, 
-                   metrics.cpu_usage / 1000000.0, 
-                   metrics.memory_usage / (1024.0 * 1024.0),
-                   metrics.pids_current);
-        }
-        
-        sleep(interval_sec);
-    }
-    
-    printf("Monitoramento concluido. %d amostras coletadas.\n", samples);
-    return samples;
-}
-
-void cgroup_generate_csv_report(const char *cgroup_name, const char *filename) {
-    FILE *csv = fopen(filename, "w");
-    if (!csv) {
-        perror("Erro ao criar arquivo CSV");
+    FILE* relatorio = fopen("cgroup_report.csv", "w");
+    if (!relatorio) {
+        perror("Erro ao criar relatorio");
         return;
     }
     
-    // Cabecalho otimizado para Python
-    fprintf(csv, "timestamp,datetime,cpu_usage_ms,memory_usage_mb,memory_limit_mb,pids_current,utilization_percent\n");
+    fprintf(relatorio, "timestamp,metric,value,limit,utilization\n");
     
-    if (global_history && global_history->count > 0) {
-        for (int i = 0; i < global_history->count; i++) {
-            CgroupMetrics *m = &global_history->metrics[i];
-            double utilization = (m->memory_limit > 0) ? 
-                (m->memory_usage * 100.0) / m->memory_limit : 0.0;
-            
-            // Converter timestamp para datetime legivel
-            char datetime[64];
-            struct tm *timeinfo = localtime(&m->timestamp);
-            strftime(datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", timeinfo);
-            
-            fprintf(csv, "%ld,%s,%.2f,%.2f,%.2f,%ld,%.1f\n",
-                    m->timestamp, datetime,
-                    m->cpu_usage / 1000000.0,
-                    m->memory_usage / (1024.0 * 1024.0),
-                    m->memory_limit / (1024.0 * 1024.0),
-                    m->pids_current,
-                    utilization);
+    time_t now = time(NULL);
+    char metric_path[MAX_PATH];
+    
+    // CPU (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/cpu.stat", cgroup_path);
+    FILE* cpu_file = fopen(metric_path, "r");
+    unsigned long long cpu_usage = 0;
+    if (cpu_file) {
+        char line[256];
+        while (fgets(line, sizeof(line), cpu_file)) {
+            if (strstr(line, "usage_usec")) {
+                sscanf(line, "usage_usec %llu", &cpu_usage);
+                cpu_usage *= 1000;
+            }
         }
-    } else {
-        // Relatorio unico se nao houver historico
-        CgroupMetrics metrics;
-        if (cgroup_get_metrics(cgroup_name, &metrics) == 0) {
-            char datetime[64];
-            struct tm *timeinfo = localtime(&metrics.timestamp);
-            strftime(datetime, sizeof(datetime), "%Y-%m-%d %H:%M:%S", timeinfo);
-            
-            double utilization = (metrics.memory_limit > 0) ? 
-                (metrics.memory_usage * 100.0) / metrics.memory_limit : 0.0;
-            
-            fprintf(csv, "%ld,%s,%.2f,%.2f,%.2f,%ld,%.1f\n",
-                    metrics.timestamp, datetime,
-                    metrics.cpu_usage / 1000000.0,
-                    metrics.memory_usage / (1024.0 * 1024.0),
-                    metrics.memory_limit / (1024.0 * 1024.0),
-                    metrics.pids_current,
-                    utilization);
-        }
+        fclose(cpu_file);
     }
+    fprintf(relatorio, "%ld,cpu_usage,%llu,0,0\n", now, cpu_usage);
     
-    fclose(csv);
-    printf("Relatorio CSV gerado: %s\n", filename);
+    // Memory (cgroups v2)
+    snprintf(metric_path, sizeof(metric_path), "%s/memory.current", cgroup_path);
+    long memory_usage = read_from_file_long(metric_path);
+    snprintf(metric_path, sizeof(metric_path), "%s/memory.max", cgroup_path);
+    long memory_limit = read_from_file_long(metric_path);
+    double memory_util = (memory_limit > 0 && memory_limit != 9223372036854775807L) ? 
+                         (double)memory_usage / memory_limit * 100 : 0;
+    fprintf(relatorio, "%ld,memory_usage,%ld,%ld,%.2f\n", now, memory_usage, memory_limit, memory_util);
+    
+    fclose(relatorio);
+    printf("Relatorio gerado: cgroup_report.csv\n");
 }
 
-void generate_python_visualization(const char *csv_filename) {
-    char py_filename[256];
-    snprintf(py_filename, sizeof(py_filename), "%s_visualization.py", csv_filename);
+bool empty_and_delete_cgroup(const char* cgroup_path) {
+    char procs_path[MAX_PATH];
+    snprintf(procs_path, sizeof(procs_path), "%s/cgroup.procs", cgroup_path);
     
-    FILE *py = fopen(py_filename, "w");
-    if (!py) {
-        perror("Erro ao criar script Python");
-        return;
+    if (!write_to_file(procs_path, "0")) {
+        fprintf(stderr, "Erro ao esvaziar cgroup %s\n", cgroup_path);
+        return false;
     }
     
-    fprintf(py, "#!/usr/bin/env python3\n");
-    fprintf(py, "\"\"\"\n");
-    fprintf(py, "VISUALIZACAO DE METRICAS CGROUP - Gerado automaticamente\n");
-    fprintf(py, "Execute: python3 %s\n", py_filename);
-    fprintf(py, "\"\"\"\n\n");
-    fprintf(py, "import pandas as pd\n");
-    fprintf(py, "import matplotlib.pyplot as plt\n");
-    fprintf(py, "import sys\n");
-    fprintf(py, "import os\n\n");
-    fprintf(py, "# Configurar estilo dos graficos\n");
-    fprintf(py, "plt.style.use('seaborn-v0_8')\n\n");
-    fprintf(py, "def load_data():\n");
-    fprintf(py, "    \"\"\"Carrega dados do CSV\"\"\"\n");
-    fprintf(py, "    try:\n");
-    fprintf(py, "        df = pd.read_csv('%s')\n", csv_filename);
-    fprintf(py, "        df['datetime'] = pd.to_datetime(df['datetime'])\n");
-    fprintf(py, "        return df\n");
-    fprintf(py, "    except Exception as e:\n");
-    fprintf(py, "        print(f\"Erro ao carregar dados: {e}\")\n");
-    fprintf(py, "        return None\n\n");
-    fprintf(py, "def create_dashboard(df):\n");
-    fprintf(py, "    \"\"\"Cria dashboard completo com graficos\"\"\"\n");
-    fprintf(py, "    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(15, 10))\n");
-    fprintf(py, "    fig.suptitle('Dashboard de Metricas CGroup', fontsize=16, fontweight='bold')\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Grafico 1: Uso de CPU\n");
-    fprintf(py, "    ax1.plot(df['datetime'], df['cpu_usage_ms'], 'b-', linewidth=2, marker='o', markersize=3)\n");
-    fprintf(py, "    ax1.set_title('Uso de CPU', fontweight='bold')\n");
-    fprintf(py, "    ax1.set_ylabel('CPU (ms)')\n");
-    fprintf(py, "    ax1.grid(True, alpha=0.3)\n");
-    fprintf(py, "    ax1.tick_params(axis='x', rotation=45)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Grafico 2: Uso de Memoria\n");
-    fprintf(py, "    ax2.plot(df['datetime'], df['memory_usage_mb'], 'r-', linewidth=2, label='Uso')\n");
-    fprintf(py, "    if df['memory_limit_mb'].iloc[0] > 0:\n");
-    fprintf(py, "        ax2.axhline(y=df['memory_limit_mb'].iloc[0], color='red', linestyle='--', alpha=0.7, label='Limite')\n");
-    fprintf(py, "    ax2.set_title('Uso de Memoria', fontweight='bold')\n");
-    fprintf(py, "    ax2.set_ylabel('Memoria (MB)')\n");
-    fprintf(py, "    ax2.legend()\n");
-    fprintf(py, "    ax2.grid(True, alpha=0.3)\n");
-    fprintf(py, "    ax2.tick_params(axis='x', rotation=45)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Grafico 3: Utilizacao\n");
-    fprintf(py, "    if 'utilization_percent' in df.columns:\n");
-    fprintf(py, "        ax3.plot(df['datetime'], df['utilization_percent'], 'g-', linewidth=2)\n");
-    fprintf(py, "        ax3.axhline(y=80, color='orange', linestyle='--', alpha=0.7, label='Alerta 80%%')\n");
-    fprintf(py, "        ax3.axhline(y=90, color='red', linestyle='--', alpha=0.7, label='Critico 90%%')\n");
-    fprintf(py, "        ax3.set_title('Utilizacao de Memoria', fontweight='bold')\n");
-    fprintf(py, "        ax3.set_ylabel('Utilizacao (%%%)')\n");
-    fprintf(py, "        ax3.legend()\n");
-    fprintf(py, "        ax3.grid(True, alpha=0.3)\n");
-    fprintf(py, "        ax3.tick_params(axis='x', rotation=45)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Grafico 4: PIDs\n");
-    fprintf(py, "    ax4.plot(df['datetime'], df['pids_current'], 'purple', linewidth=2, marker='s', markersize=3)\n");
-    fprintf(py, "    ax4.set_title('Numero de PIDs', fontweight='bold')\n");
-    fprintf(py, "    ax4.set_ylabel('PIDs')\n");
-    fprintf(py, "    ax4.grid(True, alpha=0.3)\n");
-    fprintf(py, "    ax4.tick_params(axis='x', rotation=45)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    plt.tight_layout()\n");
-    fprintf(py, "    plt.savefig('%s_dashboard.png', dpi=300, bbox_inches='tight')\n", csv_filename);
-    fprintf(py, "    print(f\"Dashboard salvo: %s_dashboard.png\")\n", csv_filename);
-    fprintf(py, "\n");
-    fprintf(py, "def show_statistics(df):\n");
-    fprintf(py, "    \"\"\"Mostra estatisticas dos dados\"\"\"\n");
-    fprintf(py, "    print(\"\\n\" + \"=\"*50)\n");
-    fprintf(py, "    print(\"ESTATISTICAS DAS METRICAS\")\n");
-    fprintf(py, "    print(\"=\"*50)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    print(f\"Total de amostras: {len(df)}\")\n");
-    fprintf(py, "    print(f\"Periodo: {df['datetime'].iloc[0]} ate {df['datetime'].iloc[-1]}\")\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    if 'cpu_usage_ms' in df.columns:\n");
-    fprintf(py, "        print(f\"\\nCPU:\")\n");
-    fprintf(py, "        print(f\"   Media: {df['cpu_usage_ms'].mean():.2f} ms\")\n");
-    fprintf(py, "        print(f\"   Maximo: {df['cpu_usage_ms'].max():.2f} ms\")\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    if 'memory_usage_mb' in df.columns:\n");
-    fprintf(py, "        print(f\"\\nMemoria:\")\n");
-    fprintf(py, "        print(f\"   Media: {df['memory_usage_mb'].mean():.2f} MB\")\n");
-    fprintf(py, "        print(f\"   Maximo: {df['memory_usage_mb'].max():.2f} MB\")\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    if 'utilization_percent' in df.columns:\n");
-    fprintf(py, "        max_util = df['utilization_percent'].max()\n");
-    fprintf(py, "        print(f\"\\nUtilizacao Maxima: {max_util:.1f}%%\")\n");
-    fprintf(py, "        if max_util > 90:\n");
-    fprintf(py, "            print(\"   ALERTA CRITICO: Utilizacao acima de 90%%\")\n");
-    fprintf(py, "        elif max_util > 80:\n");
-    fprintf(py, "            print(\"   ALERTA: Utilizacao acima de 80%%\")\n");
-    fprintf(py, "        else:\n");
-    fprintf(py, "            print(\"   Utilizacao dentro dos limites seguros\")\n");
-    fprintf(py, "\n");
-    fprintf(py, "def main():\n");
-    fprintf(py, "    print(\"Iniciando visualizacao de metricas CGroup...\")\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    df = load_data()\n");
-    fprintf(py, "    if df is None:\n");
-    fprintf(py, "        sys.exit(1)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    print(f\"Dados carregados: {len(df)} amostras\")\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Criar dashboard\n");
-    fprintf(py, "    create_dashboard(df)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    # Mostrar estatisticas\n");
-    fprintf(py, "    show_statistics(df)\n");
-    fprintf(py, "    \n");
-    fprintf(py, "    print(\"\\nVisualizacao concluida!\")\n");
-    fprintf(py, "    print(\"Arquivos gerados:\")\n");
-    fprintf(py, "    print(f\"   - {csv_filename} (dados)\")\n");
-    fprintf(py, "    print(f\"   - %s_dashboard.png (graficos)\" % '%s')\n", csv_filename);
-    fprintf(py, "\n");
-    fprintf(py, "if __name__ == \"__main__\":\n");
-    fprintf(py, "    main()\n");
+    sleep(1);
     
-    fclose(py);
+    if (rmdir(cgroup_path) != 0) {
+        fprintf(stderr, "Erro ao deletar cgroup %s: %s\n", cgroup_path, strerror(errno));
+        return false;
+    }
     
-    // Tornar executavel
-    char command[512];
-    snprintf(command, sizeof(command), "chmod +x %s", py_filename);
-    system(command);
-    
-    printf("Script Python gerado: %s\n", py_filename);
-    printf("Execute: python3 %s\n", py_filename);
-}
-
-// Funcao principal para gerar relatorio completo
-void cgroup_generate_comprehensive_report(const char *cgroup_name) {
-    printf("\nGERANDO RELATORIO COMPLETO PARA '%s'\n", cgroup_name);
-    
-    char csv_filename[256];
-    snprintf(csv_filename, sizeof(csv_filename), "cgroup_%s_report.csv", cgroup_name);
-    
-    // Gerar CSV
-    cgroup_generate_csv_report(cgroup_name, csv_filename);
-    
-    // Gerar visualizacao Python
-    generate_python_visualization(csv_filename);
-    
-    printf("\nRELATORIO COMPLETO GERADO!\n");
-    printf("Arquivos criados:\n");
-    printf("   - %s (dados em CSV)\n", csv_filename);
-    printf("   - %s_visualization.py (script Python)\n", csv_filename);
-    printf("   - %s_dashboard.png (graficos - apos executar o script)\n", csv_filename);
-    printf("\nPara visualizar os graficos, execute:\n");
-    printf("   python3 %s_visualization.py\n", csv_filename);
+    printf("Cgroup deletado: %s\n", cgroup_path);
+    return true;
 }

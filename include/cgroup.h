@@ -1,59 +1,21 @@
-
 #ifndef CGROUP_H
 #define CGROUP_H
 
-#include "cgroup.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>      // Para sleep, rmdir
-#include <sys/stat.h>    // Para mkdir
+#include <stdbool.h>
 #include <sys/types.h>
-#include <time.h>        // Para time()
-#include <errno.h>       // Para tratamento de erros
-#include <dirent.h>      // Para listar diretórios 
 
+#define MAX_PATH 1024 
 
-// Estrutura para armazenar os dados lidos do Kernel
-typedef struct {
-    long cpu_usage;          //calcular o consumo total de CPU
-    long cpu_usage_user;     
-    long cpu_usage_system;   // overhead do Kernel.
-    long memory_usage;       
-    long memory_limit;       
-    long memory_failcnt;     //quantas vezes o limite de memória foi atingido
-    long io_read_bytes;     //no disco
-    long io_write_bytes;     //no disco
-    long pids_current;       // numero de processos/threads
-    long pids_limit;         
-    time_t timestamp;       //Momento exato da coleta de dados.
-} CgroupMetrics;
+// Funções auxiliares (agora públicas para o main.c)
+bool write_to_file(const char* filepath, const char* value);
+unsigned long long read_from_file_ull(const char* filepath);
+long read_from_file_long(const char* filepath);
 
-// Estrutura para configuração de limites
-typedef struct {
-    double cpu_limit;         
-    long memory_limit;       
-    long io_read_bps;        
-    long io_write_bps;        
-    long pids_limit;         
-} CgroupLimits;
-
-// Estrutura para histórico de métricas
-typedef struct {
-    CgroupMetrics *metrics; 
-    int count; // quantos pontos de dados foram salvos
-    int capacity; // Capacidade máxima atual do array alocado
-} CgroupHistory;
-
-#define CGROUP_BASE_PATH "/sys/fs/cgroup"
-
-int cgroup_create(const char *cgroup_name);
-int cgroup_delete(const char *cgroup_name);
-int cgroup_add_process(const char *cgroup_name, int pid);
-int cgroup_set_limits(const char *cgroup_name, const CgroupLimits *limits);
-int cgroup_get_metrics(const char *cgroup_name, CgroupMetrics *metrics);
-int cgroup_list_all(char ***cgroups_list, int *count);
-void cgroup_free_list(char **cgroups_list, int count);
-void cgroup_print_metrics(const CgroupMetrics *metrics);
+// Funções principais do Control Group Manager
+bool coletar_metricas_cgroup(const char* cgroup_path);
+bool criar_configurar_cgroup(const char* controller, const char* name, double cpu_cores, long memoria_mb);
+bool move_process_to_cgroup(const char* cgroup_path, int pid);
+bool empty_and_delete_cgroup(const char* cgroup_path);
+void gerar_relatorio_utilizacao(const char* cgroup_path);
 
 #endif // CGROUP_H
