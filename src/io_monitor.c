@@ -3,18 +3,22 @@
 #include <string.h>
 #include "monitor.h"
 
+//Coleta metricas das I/O do processo
 int metricas_IO(int pid, IoMetrics *io){
     char proc_path[256];
     FILE *fp;
 
+    //Monta o caminho proc,PID, io
     sprintf(proc_path, "/proc/%d/io", pid);
     fp = fopen(proc_path , "r");
 
+    //Caso nao tenha processo ou permissão, erro
     if(fp == NULL){
         perror("Erro ao abrir o processo");
         return -1;
     }
 
+    //Criar buffer para cada linha, pesquisar
     char buffer[4096];
     char *pt;
     int vlr_rb = 0, vlr_wb = 0, vlr_diskop_l = 0, vlr_diskop_e = 0, vlr_sys_l = 0, vlr_sys_e = 0;
@@ -25,8 +29,9 @@ int metricas_IO(int pid, IoMetrics *io){
     long syscall_leitura = 0;
     long syscall_escrita = 0;
 
+    //Procura métricas linha por linha
     while(fgets(buffer, sizeof(buffer), fp) != NULL){
-        // read_bytes
+        // captura rcha 
         if(vlr_rb == 0 && strstr(buffer, "rchar") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
@@ -34,7 +39,7 @@ int metricas_IO(int pid, IoMetrics *io){
                 vlr_rb = 1;
             }
         }
-        // write_bytes
+        // captura wchar
         if(vlr_wb == 0 && strstr(buffer, "wchar") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
@@ -42,7 +47,7 @@ int metricas_IO(int pid, IoMetrics *io){
                 vlr_wb = 1;
             }
         }
-        // disk_op_leitura
+		// captura read_bytes(Bytes lidos do disco)
         if(vlr_diskop_l == 0 && strstr(buffer, "read_bytes") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
@@ -50,7 +55,7 @@ int metricas_IO(int pid, IoMetrics *io){
                 vlr_diskop_l = 1;
             }
         }
-        // disk_op_escrita
+		// captura writhe_bytes
         if(vlr_diskop_e == 0 && strstr(buffer, "write_bytes") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
@@ -58,7 +63,7 @@ int metricas_IO(int pid, IoMetrics *io){
                 vlr_diskop_e = 1;
             }
         }
-        // syscall_leitura
+        // captura o syscr
         if(vlr_sys_l == 0 && strstr(buffer, "syscr") != NULL){
             pt = strchr(buffer, ':');
             if(pt != NULL){
@@ -74,13 +79,14 @@ int metricas_IO(int pid, IoMetrics *io){
                 vlr_sys_e = 1;
             }
         }
+		//Sai do loop caso todas metricas capturadas
         if(vlr_diskop_e == 1 && vlr_diskop_l == 1 && vlr_rb == 1 && vlr_sys_e == 1 && vlr_sys_l == 1 && vlr_wb == 1){
             break;
         }
     }
 
     fclose(fp);
-
+	//calcula os totais de operações no disco e syscalls
     io -> disk_op = diskop_escrita + diskop_leitura;
     io -> syscall = syscall_escrita + syscall_leitura;
 
