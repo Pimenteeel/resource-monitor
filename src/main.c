@@ -250,10 +250,5 @@ int main(int argc, char *argv[]){
     else {
         fprintf(stderr, "Flag inválida: %s\n", flag);
     }
-<<<<<<< HEAD
-=======
-
-
->>>>>>> main
     return 0;
 }
