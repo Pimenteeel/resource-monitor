@@ -11,7 +11,8 @@ echo "---------------------------------------------"
 
 echo ""
 echo "===> Métricas coletadas pelo resource-monitor"
-./resource-monitor -r "$PID_ALVO"
+timeout 10 ../resource-monitor -r "$PID_ALVO"
+echo "Coleta encerrada."
 echo ""
 
 echo "===> Métricas coletadas no ps aux:"
