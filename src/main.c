@@ -180,9 +180,13 @@ static void executar_workload_cpu(int iteracoes) {
 }
 
 void ajuda_cgroup() {
-    printf("\nUso das funções CGroup:\n");
+     printf("\nUso das funções CGroup:\n");
     printf(" -g metrics <cgroup_path>                 Coletar metricas de cgroup\n");
-    printf(" -g create <controller> <nome> <cpu> <mem>  Criar e configurar cgroup\n");
+    printf(" -g create <controller> <nome> <cpu> <mem>\n");
+    printf("     controller: 'cpu' para limites de CPU\n");
+    printf("                 'memory' para limites de Memória\n");
+    printf("     cpu: limite em cores (0 = sem limite)\n");
+    printf("     mem: limite em MB (0 = sem limite)\n");
     printf(" -g throttle                              Conduzir experimentos de throttling\n");
     printf(" -g memlimit                              Conduzir experimento de limite de memoria\n");
     printf(" -g report <cgroup_path>                  Gerar relatorio de utilizacao\n");
@@ -469,15 +473,27 @@ int main(int argc, char *argv[]){
             return 1;
         }
     }
-    else if (strcmp(subcomando, "create") == 0) {
-        if (argc == 7) {
-            double cpu = atof(argv[5]);
-            long mem = atol(argv[6]);
-            criar_configurar_cgroup(argv[3], argv[4], cpu, mem);
-        } else {
-            printf("Erro: Uso: -g create <controller> <nome> <cpu> <mem>\n");
-            ajuda_cgroup();
-            return 1;
+    else if (strcmp(subcomando, "create") == 0 && argc == 7) {
+        char* nome = argv[4];
+        double cpu = atof(argv[5]);
+        long mem = atol(argv[6]);
+        
+        // Criar cgroup CPU se especificado
+        if (cpu > 0) {
+            if (!criar_configurar_cgroup("cpu", nome, cpu, 0)) {
+                fprintf(stderr, "Erro ao criar cgroup CPU %s\n", nome);
+            } else {
+                printf(" Cgroup CPU criado: /sys/fs/cgroup/%s\n", nome);
+            }
+        }
+        
+        // Criar cgroup Memory se especificado
+        if (mem > 0) {
+            if (!criar_configurar_cgroup("memory", nome, 0, mem)) {
+                fprintf(stderr, "Erro ao criar cgroup Memory %s\n", nome);
+            } else {
+                printf(" Cgroup Memory criado: /sys/fs/cgroup/%s\n", nome);
+            }
         }
     }
     else if (strcmp(subcomando, "throttle") == 0) {

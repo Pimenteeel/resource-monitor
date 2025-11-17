@@ -186,19 +186,26 @@ bool criar_configurar_cgroup(const char* controller, const char* name, double cp
     }
     
     if (memoria_mb > 0) {
-        long memoria_bytes = memoria_mb * 1024 * 1024;
-        
-        char filepath[MAX_PATH];
-        snprintf(filepath, sizeof(filepath), "%s/memory.max", cgroup_path);
-        char memory_str[32];
-        snprintf(memory_str, sizeof(memory_str), "%ld", memoria_bytes);
-        
-        if (!write_to_file(filepath, memory_str)) {
-            fprintf(stderr, "Erro ao configurar limite de memoria\n");
-            return false;
-        }
-        
-        printf("Memoria configurada: %ld bytes\n", memoria_bytes);
+    long memoria_bytes = memoria_mb * 1024 * 1024;
+    
+    char filepath[MAX_PATH];
+    int written = snprintf(filepath, sizeof(filepath), "%s/memory.max", cgroup_path);
+    
+    // Verificar se o caminho não foi truncado
+    if (written >= (int)sizeof(filepath)) {
+        fprintf(stderr, "Caminho do arquivo memoria muito longo: %s\n", cgroup_path);
+        return false;
+    }
+    
+    char memory_str[32];
+    snprintf(memory_str, sizeof(memory_str), "%ld", memoria_bytes);
+    
+    if (!write_to_file(filepath, memory_str)) {
+        fprintf(stderr, "Erro ao configurar limite de memoria\n");
+        return false;
+    }
+    
+    printf("Memoria configurada: %ld bytes\n", memoria_bytes);
     }
     
     printf("Cgroup criado e configurado com sucesso\n");
