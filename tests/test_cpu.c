@@ -5,7 +5,7 @@
 #include <math.h>
 
 #define NUM_THREADS 4
-#define ITERATIONS 100000000l
+#define ITERATIONS 200000000000L
 
 void* cpu_intensive_task(void* arg) {
     int thread_id = *(int*)arg;
